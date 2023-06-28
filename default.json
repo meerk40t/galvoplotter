@@ -2,7 +2,7 @@
     "mock": false,
     "is_shutdown": false,
     "connection": null,
-    "light_pin": 8,
+    "light_pin": 4,
     "footpedal_pin": 15,
     "laser_pin": 0,
     "galvos_per_mm": 500,
