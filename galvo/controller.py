@@ -36,6 +36,7 @@ class GalvoController:
 
     def __init__(
         self,
+        settings_file=None,
         x=0x8000,
         y=0x8000,
         mark_speed=100.0,
@@ -155,6 +156,10 @@ class GalvoController:
         self._delay_off = None
         self._delay_poly = None
         self._delay_end = None
+        if settings_file is not None:
+            import json
+            with open(settings_file, 'r') as fp:
+                self.__dict__.update(json.load(fp))
 
     def __enter__(self):
         self.connect_if_needed()

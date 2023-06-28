@@ -3,7 +3,8 @@ import math
 from pynput import keyboard
 from galvo.controller import GalvoController
 
-controller = GalvoController(mark_speed=100.0)
+controller = GalvoController("../default.json")
+
 radius = 0x1000  # Initial radius
 
 
