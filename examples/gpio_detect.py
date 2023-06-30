@@ -7,9 +7,13 @@ controller = GalvoController("../default.json")
 def toggle_gpio(key):
     if key == keyboard.Key.esc:
         return False  # Stop the keyboard listener
+    try:
+        char = key.char
+    except AttributeError:
+        return
 
-    if key.char.lower() in "0123456789abcdef":
-        bit = int(key.char, 16)
+    if char.lower() in "0123456789abcdef":
+        bit = int(char, 16)
         if controller.is_port(bit):  # Check if the port is currently on
             controller.port_off(bit)  # Turn off the port
             print("Port", bit, "turned off")
