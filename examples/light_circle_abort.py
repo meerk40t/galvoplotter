@@ -36,9 +36,11 @@ def on_release(key):
     if char == "+":  # Check if "+" key is released
         radius += 0x100  # Increase the radius by a step
         print("Radius increased:", hex(radius))
+        controller.abort()
     elif char == "-":  # Check if "-" key is released
         radius -= 0x100  # Decrease the radius by a step
         print("Radius decreased:", hex(radius))
+        controller.abort()
 
 
 listener = keyboard.Listener(on_release=on_release)
