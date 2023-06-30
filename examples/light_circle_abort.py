@@ -9,12 +9,12 @@ radius = 0x1000  # Initial radius
 
 
 def draw_circle():
-    global radius
     with controller as c:
         c.goto(0x8000, 0x9000)  # Move to the starting position
 
         while not controller.is_shutdown:
             for angle in range(0, 360, 10):
+                global radius
                 x = 0x8000 + int(radius * math.cos(math.radians(angle)))
                 y = 0x8000 + int(radius * math.sin(math.radians(angle)))
                 c.light(x, y)
