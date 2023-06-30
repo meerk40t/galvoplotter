@@ -410,20 +410,6 @@ class GalvoController:
         )
         return self.send(cmd, read=read)
 
-    def raw_write(self, command, v1=0, v2=0, v3=0, v4=0, v5=0):
-        """
-        Write this raw command to value. Sends the correct way based on command value.
-
-        @return:
-        """
-        if command >= 0x8000:
-            self._list_write(command, v1, v2, v3, v4, v5)
-        else:
-            self._command(command, v1, v2, v3, v4, v5)
-
-    def raw_clear(self):
-        self._list_new()
-
     #######################
     # PLOTLIKE SHORTCUTS
     #######################
@@ -526,21 +512,22 @@ class GalvoController:
                 return
 
     def abort(self, dummy_packet=True):
-        self.stop_execute()
-        self.set_fiber_mo(0)
-        self.reset_list()
-        if dummy_packet:
-            self._list_new()
-            self.list_end_of_list()  # Ensure packet is sent on end.
-            self._list_end()
-            if not self._list_executing:
-                self.execute_list()
-        self._list_executing = False
-        self._number_of_list_packets = 0
-        self.set_fiber_mo(0)
-        self.port_off(self.laser_pin)
-        self.write_port()
-        self.mode = DRIVER_STATE_RAPID
+        with self.lock:
+            self.stop_execute()
+            self.set_fiber_mo(0)
+            self.reset_list()
+            if dummy_packet:
+                self._list_new()
+                self.list_end_of_list()  # Ensure packet is sent on end.
+                self._list_end()
+                if not self._list_executing:
+                    self.execute_list()
+            self._list_executing = False
+            self._number_of_list_packets = 0
+            self.set_fiber_mo(0)
+            self.port_off(self.laser_pin)
+            self.write_port()
+            self.mode = DRIVER_STATE_RAPID
 
     def pause(self):
         self.paused = True
