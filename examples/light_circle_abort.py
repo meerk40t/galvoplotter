@@ -28,10 +28,15 @@ def on_release(key):
         controller.abort()
         controller.shutdown()
         return False
-    elif key.char == "+":  # Check if "+" key is released
+    try:
+        char = key.char
+    except AttributeError:
+        return
+
+    if char == "+":  # Check if "+" key is released
         radius += 0x100  # Increase the radius by a step
         print("Radius increased:", hex(radius))
-    elif key.char == "-":  # Check if "-" key is released
+    elif char == "-":  # Check if "-" key is released
         radius -= 0x100  # Decrease the radius by a step
         print("Radius decreased:", hex(radius))
 
