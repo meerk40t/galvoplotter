@@ -428,6 +428,10 @@ class GalvoController:
         if x > 0xFFFF or x < 0 or y > 0xFFFF or y < 0:
             # Moves to out of range are not performed.
             return
+        if long is None:
+            long = self.delay_jump_long
+        if short is None:
+            short = self.delay_jump_short
         if self._goto_speed is not None:
             self.set_travel_speed(self._goto_speed)
         distance = int(abs(complex(x, y) - complex(self._last_x, self._last_y)))
@@ -442,6 +446,10 @@ class GalvoController:
         if x > 0xFFFF or x < 0 or y > 0xFFFF or y < 0:
             # Moves to out of range are not performed.
             return
+        if long is None:
+            long = self.delay_jump_long
+        if short is None:
+            short = self.delay_jump_short
         if self.light_on():
             self.list_write_port()
         if self._light_speed is not None:
@@ -458,6 +466,10 @@ class GalvoController:
         if x > 0xFFFF or x < 0 or y > 0xFFFF or y < 0:
             # Moves to out of range are not performed.
             return
+        if long is None:
+            long = self.delay_jump_long
+        if short is None:
+            short = self.delay_jump_short
         if self.light_off():
             self.list_write_port()
         if self._dark_speed is not None:
