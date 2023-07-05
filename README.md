@@ -53,7 +53,20 @@ There are four spooler states.
 * `executing`: The spooler is started and jobs are currently being executed.
 
 ## Job
-Jobs primarily consist of a function to be called. This function returns `True` if the function was fully-processed. It will execute repeatedly by the spooler until it returns True to indicate completion. Between executions the spooler can be paused and abort, etc.
+Jobs primarily consist of a function to be called. This function returns `True` if the function was fully-processed. It will execute repeatedly by the spooler until it returns `True` to indicate completion. Between executions the spooler can be paused and abort, etc.
+
+There is `generate_job()` convenience method which allows you to yield the function to be called and the operands.
+```python
+    from galvo import GalvoController
+    controller = GalvoController(settings_file="test.json")
+
+    def my_generator():
+        while True:
+            yield "dark", 0x8000, 0x8000
+            yield "light", 0x2000, 0x2000
+
+    controller.submit(controller.generate_job(my_generator))
+```
 
 ### Lifecycle
 There are at least five job states.
