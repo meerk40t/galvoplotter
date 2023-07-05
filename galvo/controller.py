@@ -173,15 +173,6 @@ class GalvoController:
             with open(settings_file, 'r') as fp:
                 self.__dict__.update(json.load(fp))
 
-    def __enter__(self):
-        self.connect_if_needed()
-        self.program_mode()
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.rapid_mode()
-        self.disconnect()
-
     def submit(self, job):
         with self._spooler_lock:
             self._queue.append(job)
