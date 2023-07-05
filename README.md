@@ -58,7 +58,7 @@ Jobs primarily consist of a function to be called. This function returns `True` 
 There is `generate_job()` convenience method which allows you to yield the function to be called and the operands.
 ```python
     from galvo import GalvoController
-    controller = GalvoController(settings_file="test.json")
+    controller = GalvoController()
 
     def my_generator():
         while True:

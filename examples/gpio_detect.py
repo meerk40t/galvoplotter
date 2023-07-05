@@ -1,7 +1,7 @@
 from galvo.controller import GalvoController
 from pynput import keyboard
 
-controller = GalvoController("../default.json")
+controller = GalvoController("default.json")
 
 
 def toggle_gpio(key):

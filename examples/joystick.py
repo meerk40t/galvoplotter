@@ -2,7 +2,7 @@ import pygame
 
 from galvo.controller import GalvoController
 
-controller = GalvoController("../default.json")
+controller = GalvoController("default.json")
 
 
 def main():
