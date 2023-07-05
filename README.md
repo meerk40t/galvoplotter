@@ -71,7 +71,7 @@ There is `generate_job()` convenience method which allows you to yield the funct
 ### Lifecycle
 There are at least five job states.
 * `init`: This job exists, but it is not slated to be executed.
-* `queue`: This job is in the spooler queue.
+* `queued`: This job is in the spooler queue.
 * `running`: This job is the currently running job in the spooler.
 * `finished`: This job finished naturally by returning `True` for its execution response.
 * `cancelled`: This job was cancelled while it was being executed, or before it was to be executed.
