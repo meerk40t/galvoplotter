@@ -138,7 +138,7 @@ class GalvoController:
 
         self._port_bits = 0
         self._machine_index = machine_index
-        self.laser_configuration = "rapid"
+        self.laser_configuration = "initial"
         self._active_list = None
         self._active_index = 0
         self._list_executing = False
@@ -283,14 +283,14 @@ class GalvoController:
 
     @property
     def state(self):
-        if self.laser_configuration == "rapid":
+        if self.laser_configuration == "initial":
             return "idle", "idle"
         if self.paused:
             return "hold", "paused"
-        if self.laser_configuration == "light":
-            return "busy", "light"
-        if self.laser_configuration == "program":
-            return "busy", "program"
+        if self.laser_configuration == "lighting":
+            return "busy", "lighting"
+        if self.laser_configuration == "marking":
+            return "busy", "marking"
 
     #######################
     # Connection Handler
@@ -430,21 +430,21 @@ class GalvoController:
     @contextmanager
     def marking(self, *args, **kwargs):
         try:
-            self.program_mode()
+            self.marking_configuration()
             yield self
         finally:
-            self.rapid_mode()
+            self.initial_configuration()
 
     @contextmanager
     def lighting(self, *args, **kwargs):
         try:
-            self.light_mode()
+            self.lighting_configuration()
             yield self
         finally:
-            self.rapid_mode()
+            self.initial_configuration()
 
-    def rapid_mode(self):
-        if self.laser_configuration == "rapid":
+    def initial_configuration(self):
+        if self.laser_configuration == "initial":
             return
         self.list_end_of_list()  # Ensure at least one list_end_of_list
         self._list_end()
@@ -459,19 +459,19 @@ class GalvoController:
         self.write_port()
         marktime = self.get_mark_time()
         self.usb_log(f"Time taken for list execution: {marktime}")
-        self.laser_configuration = "rapid"
+        self.laser_configuration = "initial"
 
-    def program_mode(self):
-        if self.laser_configuration == "program":
+    def marking_configuration(self):
+        if self.laser_configuration == "marking":
             return
-        if self.laser_configuration == "light":
-            self.laser_configuration = "program"
+        if self.laser_configuration == "lighting":
+            self.laser_configuration = "marking"
             self.light_off()
             self.port_on(bit=self.laser_pin)
             self.write_port()
             self.set_fiber_mo(1)
         else:
-            self.laser_configuration = "program"
+            self.laser_configuration = "marking"
             self.reset_list()
             self.port_on(bit=self.laser_pin)
             self.write_port()
@@ -494,10 +494,10 @@ class GalvoController:
             self.list_write_port()
         self.set()
 
-    def light_mode(self):
-        if self.laser_configuration == "light":
+    def lighting_configuration(self):
+        if self.laser_configuration == "lighting":
             return
-        if self.laser_configuration == "program":
+        if self.laser_configuration == "marking":
             self.set_fiber_mo(0)
             self.port_off(self.laser_pin)
             self.port_on(self.light_pin)
@@ -521,7 +521,7 @@ class GalvoController:
             self.port_off(self.laser_pin)
             self.port_on(self.light_pin)
             self.list_write_port()
-        self.laser_configuration = "light"
+        self.laser_configuration = "lighting"
 
     #######################
     # PLOTLIKE SHORTCUTS
@@ -610,9 +610,9 @@ class GalvoController:
             dwell_time -= d
 
     def wait_for_input(self, mask, value):
-        self.rapid_mode()
+        self.initial_configuration()
         self._wait_for_input_protocol(mask, value)
-        self.program_mode()
+        self.marking_configuration()
 
     def _wait_for_input_protocol(self, input_mask, input_value):
         required_passes = self.input_passes_required
@@ -698,7 +698,7 @@ class GalvoController:
             self.set_fiber_mo(0)
             self.port_off(self.laser_pin)
             self.write_port()
-            self.laser_configuration = "rapid"
+            self.laser_configuration = "initial"
 
     def pause(self):
         self.paused = True

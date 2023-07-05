@@ -20,7 +20,7 @@ class TestAPI(unittest.TestCase):
             Never indicates job is finished.
             :return:
             """
-            controller.light_mode()
+            controller.lighting_configuration()
             controller.dark(0x8000, 0x8000)
             controller.light(0x2000, 0x2000)
             return False
