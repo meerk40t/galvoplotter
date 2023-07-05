@@ -185,6 +185,30 @@ class GalvoController:
             self._spooler_lock.notify()
         self.start()
 
+    def generate_job(self, generator):
+        v = generator()
+
+        def job():
+            try:
+                g = next(v)
+                if isinstance(g, tuple):
+                    cmd = g[0]
+                    args = g[1:]
+                else:
+                    cmd = g
+                    args = tuple()
+
+                try:
+                    func = getattr(self, cmd)
+                    func(*args)
+                except AttributeError:
+                    pass
+                return False
+            except StopIteration:
+                return True
+
+        return job
+
     def remove(self, element):
         with self._spooler_lock:
             for i in range(len(self._queue) - 1, -1, -1):
