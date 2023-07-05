@@ -76,6 +76,7 @@ class GalvoController:
         delay_open_mo=8.0,
         delay_jump_short=8,
         delay_jump_long=200.0,
+        input_passes_required=3,
         mock=False,
         machine_index=0,
         usb_log=None,
@@ -119,6 +120,7 @@ class GalvoController:
         self.fly_resolution_2 = fly_resolution_2
         self.fly_resolution_3 = fly_resolution_3
         self.fly_resolution_4 = fly_resolution_4
+        self.input_passes_required = input_passes_required
 
         self.pulse_width = pulse_width
 
@@ -619,6 +621,52 @@ class GalvoController:
         if delay:
             self.set_delay_jump(delay)
         self.list_jump(x, y)
+
+    def dwell(self, time_in_ms, delay_end=True):
+        dwell_time = time_in_ms * 100  # Dwell time in ms units in 10 us
+        while dwell_time > 0:
+            d = min(dwell_time, 60000)
+            self.list_laser_on_point(int(d))
+            dwell_time -= d
+        if delay_end:
+            self.list_delay_time(int(self.delay_end / 10.0))
+
+    def wait(self, time_in_ms):
+        dwell_time = time_in_ms * 100  # Dwell time in ms units in 10 us
+        while dwell_time > 0:
+            d = min(dwell_time, 60000)
+            self.list_delay_time(int(d))
+            dwell_time -= d
+
+    def wait_for_input(self, mask, value):
+        self.rapid_mode()
+        self._wait_for_input_protocol(q.input_mask, q.input_value)
+        self.program_mode()
+
+    def _wait_for_input_protocol(self, input_mask, input_value):
+        required_passes = self.input_passes_required
+        passes = 0
+        while (
+            self.connection and not self.connection.is_shutdown and not self._aborting
+        ):
+            read_port = self.connection.read_port()
+            b = read_port[1]
+            all_matched = True
+            for i in range(16):
+                if (input_mask >> i) & 1 == 0:
+                    continue  # We don't care about this mask.
+                if (input_value >> i) & 1 != (b >> i) & 1:
+                    all_matched = False
+                    time.sleep(0.05)
+                    break
+
+            if all_matched:
+                passes += 1
+                if passes > required_passes:
+                    # Success, we matched the wait for protocol.
+                    return
+            else:
+                passes = 0
 
     def set_xy(self, x, y):
         distance = int(abs(complex(x, y) - complex(self._last_x, self._last_y)))
