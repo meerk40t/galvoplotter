@@ -80,9 +80,16 @@ class GalvoController:
         machine_index=0,
         usb_log=None,
     ):
-        self.lock = threading.RLock()
+        self._shutdown = False
+        self._sending = True
+
+        self._spooler_lock = threading.Condition()
+        self._queue = []
+        self._current = None
+        self._thread = None
+
+        self._list_build_lock = threading.RLock()
         self.mock = mock
-        self.is_shutdown = False  # Shutdown finished.
         self.connection = None
         self.light_pin = light_pin
         self.footpedal_pin = foot_pin
@@ -125,7 +132,7 @@ class GalvoController:
 
         # Running attributes
         self._usb_log = usb_log
-        self._is_opening = False
+        self._is_connecting_to_laser = False
         self._abort_open = False
         self._disable_connect = False
 
@@ -172,6 +179,85 @@ class GalvoController:
         self.rapid_mode()
         self.disconnect()
 
+    def submit(self, job):
+        with self._spooler_lock:
+            self._queue.append(job)
+            self._spooler_lock.notify()
+        self.start()
+
+    def remove(self, element):
+        with self._spooler_lock:
+            for i in range(len(self._queue) - 1, -1, -1):
+                e = self._queue[i]
+                if e is element:
+                    del self._queue[i]
+            self._spooler_lock.notify()
+
+    def shutdown(self, *args, **kwargs):
+        self._shutdown = True
+        with self._spooler_lock:
+            try:
+                # If something is currently processing stop it.
+                self._current.stop()
+            except AttributeError:
+                pass
+            self._spooler_lock.notify_all()
+            self._queue.clear()
+            self.abort()
+        if self._thread:
+            self._thread.join()
+
+    def start(self):
+        self._shutdown = False
+        if not self._thread:
+            self._thread = threading.Thread(target=self._run)
+            self._thread.start()
+
+    def _run(self):
+        """
+        Spooler run thread. While the controller is not shutdown we read the queue and execute whatever functions are
+        located in the queue. The jobs return whether they were fully_executed. If they were they are removed
+        as completed and the next item in queue is processed.
+
+        :return:
+        """
+        while not self._shutdown:
+            with self._spooler_lock:
+                try:
+                    program = self._queue[0]
+                except IndexError:
+                    if self._shutdown:
+                        return
+                    # There is no work to do.
+                    self._spooler_lock.wait()
+                    continue
+            self._current = program
+            if self._shutdown:
+                return
+            try:
+                fully_executed = program()
+            except ConnectionAbortedError:
+                # Driver could no longer connect to where it was told to send the data.
+                return
+            except ConnectionRefusedError:
+                # Driver connection failed but, we are not giving up.
+                if self._shutdown:
+                    return
+                with self._spooler_lock:
+                    self._spooler_lock.wait()
+                continue
+            if fully_executed:
+                # all work finished
+                self.remove(program)
+
+    @property
+    def current(self):
+        return self._current
+
+    @property
+    def queue(self):
+        return self._queue
+
     def usb_log(self, data):
         if self._usb_log:
             self._usb_log(data)
@@ -187,23 +273,54 @@ class GalvoController:
         if self.mode == DRIVER_STATE_PROGRAM:
             return "busy", "program"
 
-    def set_disable_connect(self, status):
-        self._disable_connect = status
-
-    def shutdown(self, *args, **kwargs):
-        self.is_shutdown = True
-
     @property
-    def connected(self):
+    def is_connected(self):
+        """
+        Check whether the controller state is connected to the laser.
+        :return:
+        """
         if self.connection is None:
             return False
         return self.connection.is_open(self._machine_index)
 
     @property
     def is_connecting(self):
+        """
+        Check whether the controller state is current connecting (but not yet connected) to the laser.
+        :return:
+        """
         if self.connection is None:
             return False
-        return self._is_opening
+        return self._is_connecting_to_laser
+
+    @property
+    def is_connection_allowed(self):
+        """
+        Check whether the controller state currently allows connection attempts.
+
+        To clear this state requires calling `disconnect()` directly. The connection failed and all commands should
+        issue a `ConnectionRefusedError`.
+        :return:
+        """
+        return not self._disable_connect
+
+    @property
+    def is_executing(self):
+        """
+        Check whether the controller is executing a list-command queue. This should be true anytime the queue is not
+        empty or not fully executed.
+        :return:
+        """
+        return self.can_spool and len(self._queue)
+
+    @property
+    def can_spool(self):
+        """
+        Check whether the controller is accepting job submissions. This should be true for most of the lifecycle except
+        after and during shutdown.
+        :return:
+        """
+        return not self._shutdown
 
     def abort_connect(self):
         self._abort_open = True
@@ -216,7 +333,7 @@ class GalvoController:
             pass
         self.connection = None
         # Reset error to allow another attempt
-        self.set_disable_connect(False)
+        self._disable_connect = False
 
     def connect_if_needed(self):
         if self._disable_connect:
@@ -233,7 +350,7 @@ class GalvoController:
                 self.connection.recv = print
             else:
                 self.connection = USBConnection(self.usb_log)
-        self._is_opening = True
+        self._is_connecting_to_laser = True
         self._abort_open = False
         count = 0
         while not self.connection.is_open(self._machine_index):
@@ -244,17 +361,16 @@ class GalvoController:
             except (ConnectionError, ConnectionRefusedError):
                 time.sleep(0.3)
                 count += 1
-                # self.usb_log(f"Error-Routine pass #{count}")
-                if self.is_shutdown or self._abort_open:
-                    self._is_opening = False
+                if not self._sending or self._abort_open:
+                    self._is_connecting_to_laser = False
                     self._abort_open = False
                     return
                 if self.connection.is_open(self._machine_index):
                     self.connection.close(self._machine_index)
                 if count >= 10:
                     # We have failed too many times.
-                    self._is_opening = False
-                    self.set_disable_connect(True)
+                    self._is_connecting_to_laser = False
+                    self._disable_connect = True
                     self.usb_log("Could not connect to the LMC controller.")
                     self.usb_log("Automatic connections disabled.")
                     raise ConnectionRefusedError(
@@ -262,11 +378,11 @@ class GalvoController:
                     )
                 time.sleep(0.3)
                 continue
-        self._is_opening = False
+        self._is_connecting_to_laser = False
         self._abort_open = False
 
     def send(self, data, read=True):
-        if self.is_shutdown:
+        if not self._sending:
             return -1, -1, -1, -1
         self.connect_if_needed()
         try:
@@ -373,7 +489,7 @@ class GalvoController:
     #######################
 
     def _list_end(self):
-        with self.lock:
+        with self._list_build_lock:
             if self._active_list and self._active_index:
                 self.wait_ready()
                 while self.paused:
@@ -388,14 +504,14 @@ class GalvoController:
                     self._list_executing = True
 
     def _list_new(self):
-        with self.lock:
+        with self._list_build_lock:
             self._active_list = copy(empty)
             self._active_index = 0
 
     def _list_write(self, command, v1=0, v2=0, v3=0, v4=0, v5=0):
         if self._active_index >= 0xC00:
             self._list_end()
-        if self.lock:
+        with self._list_build_lock:
             if self._active_list is None:
                 self._list_new()
             index = self._active_index
@@ -508,23 +624,23 @@ class GalvoController:
     def wait_finished(self):
         while not self.is_ready_and_not_busy():
             time.sleep(0.01)
-            if self.is_shutdown:
+            if not self._sending:
                 return
 
     def wait_ready(self):
         while not self.is_ready():
             time.sleep(0.01)
-            if self.is_shutdown:
+            if not self._sending:
                 return
 
     def wait_idle(self):
         while self.is_busy():
             time.sleep(0.01)
-            if self.is_shutdown:
+            if not self._sending:
                 return
 
     def abort(self, dummy_packet=True):
-        with self.lock:
+        with self._list_build_lock:
             self.stop_execute()
             self.set_fiber_mo(0)
             self.reset_list()
