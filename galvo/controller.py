@@ -173,6 +173,11 @@ class GalvoController:
             with open(settings_file, 'r') as fp:
                 self.__dict__.update(json.load(fp))
 
+
+    #######################
+    # SPOOLER MANAGEMENT
+    #######################
+
     def submit(self, job):
         with self._spooler_lock:
             self._queue.append(job)
@@ -522,7 +527,6 @@ class GalvoController:
             self.list_write_port()
         self.mode = DRIVER_STATE_LIGHT
 
-
     #######################
     # PLOTLIKE SHORTCUTS
     #######################
@@ -760,7 +764,7 @@ class GalvoController:
         self.usb_log("Ready")
 
     #######################
-    # Attributes Set
+    # LASER PARAMETER SET
     #######################
 
     def set(
@@ -863,7 +867,7 @@ class GalvoController:
         self.list_fiber_ylpm_pulse_width(self.pulse_width)
 
     #######################
-    # Port Configure
+    # GPIO TOGGLE
     #######################
 
     def light_on(self):
@@ -926,7 +930,7 @@ class GalvoController:
         return int(round(power * 0xFFF / 100.0))
 
     #######################
-    # HIGH LEVEL OPERATIONS
+    # COR FILE MANAGEMENT
     #######################
 
     def write_correction_file(self, filename):
@@ -1048,7 +1052,7 @@ class GalvoController:
         return self.send(cmd, read=read)
 
     #######################
-    # RAW LIST COMMAND
+    # RAW LIST COMMANDS
     #######################
 
     def list_jump(self, x, y, angle=0):
@@ -1321,7 +1325,7 @@ class GalvoController:
         self._list_write(listReadyMark)
 
     #######################
-    # COMMAND LIST SHORTCUTS
+    # RAW REALTIME COMMANDS
     #######################
 
     def disable_laser(self):
