@@ -12,7 +12,7 @@ def draw_circle():
     with controller as c:
         c.goto(0x8000, 0x9000)  # Move to the starting position
 
-        while not controller.is_shutdown:
+        while not controller.can_spool:
             for angle in range(0, 360, 10):
                 global radius
                 x = 0x8000 + int(radius * math.cos(math.radians(angle)))
