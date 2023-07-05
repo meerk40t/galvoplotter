@@ -1,3 +1,10 @@
+"""
+Script toggles GPIO ports with keys between 0-f (hex).
+Pressing escape quits.
+
+Connection happens automatically at the first issue of realtime `write_port()` command.
+"""
+
 from galvo.controller import GalvoController
 from pynput import keyboard
 
