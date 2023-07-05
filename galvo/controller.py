@@ -15,9 +15,6 @@ from .consts import *
 from .mock_connection import MockConnection
 from .usb_connection import USBConnection
 
-DRIVER_STATE_RAPID = "rapid"
-DRIVER_STATE_LIGHT = "light"
-DRIVER_STATE_PROGRAM = "program"
 
 BUSY = 0x04
 READY = 0x20
@@ -141,7 +138,7 @@ class GalvoController:
 
         self._port_bits = 0
         self._machine_index = machine_index
-        self.mode = DRIVER_STATE_RAPID
+        self.laser_configuration = "rapid"
         self._active_list = None
         self._active_index = 0
         self._list_executing = False
@@ -286,13 +283,13 @@ class GalvoController:
 
     @property
     def state(self):
-        if self.mode == DRIVER_STATE_RAPID:
+        if self.laser_configuration == "rapid":
             return "idle", "idle"
         if self.paused:
             return "hold", "paused"
-        if self.mode == DRIVER_STATE_LIGHT:
+        if self.laser_configuration == "light":
             return "busy", "light"
-        if self.mode == DRIVER_STATE_PROGRAM:
+        if self.laser_configuration == "program":
             return "busy", "program"
 
     #######################
@@ -447,7 +444,7 @@ class GalvoController:
             self.rapid_mode()
 
     def rapid_mode(self):
-        if self.mode == DRIVER_STATE_RAPID:
+        if self.laser_configuration == "rapid":
             return
         self.list_end_of_list()  # Ensure at least one list_end_of_list
         self._list_end()
@@ -462,19 +459,19 @@ class GalvoController:
         self.write_port()
         marktime = self.get_mark_time()
         self.usb_log(f"Time taken for list execution: {marktime}")
-        self.mode = DRIVER_STATE_RAPID
+        self.laser_configuration = "rapid"
 
     def program_mode(self):
-        if self.mode == DRIVER_STATE_PROGRAM:
+        if self.laser_configuration == "program":
             return
-        if self.mode == DRIVER_STATE_LIGHT:
-            self.mode = DRIVER_STATE_PROGRAM
+        if self.laser_configuration == "light":
+            self.laser_configuration = "program"
             self.light_off()
             self.port_on(bit=self.laser_pin)
             self.write_port()
             self.set_fiber_mo(1)
         else:
-            self.mode = DRIVER_STATE_PROGRAM
+            self.laser_configuration = "program"
             self.reset_list()
             self.port_on(bit=self.laser_pin)
             self.write_port()
@@ -498,9 +495,9 @@ class GalvoController:
         self.set()
 
     def light_mode(self):
-        if self.mode == DRIVER_STATE_LIGHT:
+        if self.laser_configuration == "light":
             return
-        if self.mode == DRIVER_STATE_PROGRAM:
+        if self.laser_configuration == "program":
             self.set_fiber_mo(0)
             self.port_off(self.laser_pin)
             self.port_on(self.light_pin)
@@ -524,7 +521,7 @@ class GalvoController:
             self.port_off(self.laser_pin)
             self.port_on(self.light_pin)
             self.list_write_port()
-        self.mode = DRIVER_STATE_LIGHT
+        self.laser_configuration = "light"
 
     #######################
     # PLOTLIKE SHORTCUTS
@@ -701,7 +698,7 @@ class GalvoController:
             self.set_fiber_mo(0)
             self.port_off(self.laser_pin)
             self.write_port()
-            self.mode = DRIVER_STATE_RAPID
+            self.laser_configuration = "rapid"
 
     def pause(self):
         self.paused = True
