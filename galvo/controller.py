@@ -173,7 +173,6 @@ class GalvoController:
             with open(settings_file, 'r') as fp:
                 self.__dict__.update(json.load(fp))
 
-
     #######################
     # SPOOLER MANAGEMENT
     #######################
@@ -764,6 +763,115 @@ class GalvoController:
         self.usb_log("Ready")
 
     #######################
+    # GPIO TOGGLE
+    #######################
+
+    def light_on(self):
+        if not self.is_port(self.light_pin):
+            self.port_on(self.light_pin)
+            return True
+        return False
+
+    def light_off(self):
+        if self.is_port(self.light_pin):
+            self.port_off(self.light_pin)
+            return True
+        return False
+
+    def is_port(self, bit):
+        return bool((1 << bit) & self._port_bits)
+
+    def port_on(self, bit):
+        self._port_bits = self._port_bits | (1 << bit)
+
+    def port_off(self, bit):
+        self._port_bits = ~((~self._port_bits) | (1 << bit))
+
+    def port_set(self, mask, values):
+        self._port_bits &= ~mask  # Unset mask.
+        self._port_bits |= values & mask  # Set masked bits.
+
+    #######################
+    # COR FILE MANAGEMENT
+    #######################
+
+    def write_correction_file(self, filename):
+        if filename is None:
+            self.write_blank_correct_file()
+            return
+        try:
+            table = self._read_correction_file(filename)
+            self._write_correction_table(table)
+        except OSError:
+            self.write_blank_correct_file()
+            return
+
+    @staticmethod
+    def get_scale_from_correction_file(filename):
+        with open(filename, "rb") as f:
+            label = f.read(0x16)
+            if label.decode("utf-16") == "LMC1COR_1.0":
+                unk = f.read(2)
+                return struct.unpack("63d", f.read(0x1F8))[43]
+            else:
+                unk = f.read(6)
+                return struct.unpack("d", f.read(8))[0]
+
+    def write_blank_correct_file(self):
+        self.write_cor_table(False)
+
+    def _read_float_correction_file(self, f):
+        """
+        Read table for cor files marked: LMC1COR_1.0
+        @param f:
+        @return:
+        """
+        table = []
+        for j in range(65):
+            for k in range(65):
+                dx = int(round(struct.unpack("d", f.read(8))[0]))
+                dx = dx if dx >= 0 else -dx + 0x8000
+                dy = int(round(struct.unpack("d", f.read(8))[0]))
+                dy = dy if dy >= 0 else -dy + 0x8000
+                table.append([dx & 0xFFFF, dy & 0xFFFF])
+        return table
+
+    def _read_int_correction_file(self, f):
+        table = []
+        for j in range(65):
+            for k in range(65):
+                dx = int.from_bytes(f.read(4), "little", signed=True)
+                dx = dx if dx >= 0 else -dx + 0x8000
+                dy = int.from_bytes(f.read(4), "little", signed=True)
+                dy = dy if dy >= 0 else -dy + 0x8000
+                table.append([dx & 0xFFFF, dy & 0xFFFF])
+        return table
+
+    def _read_correction_file(self, filename):
+        """
+        Reads a standard .cor file and builds a table from that.
+
+        @param filename:
+        @return:
+        """
+        with open(filename, "rb") as f:
+            label = f.read(0x16)
+            if label.decode("utf-16") == "LMC1COR_1.0":
+                header = f.read(0x1FA)
+                return self._read_float_correction_file(f)
+            else:
+                header = f.read(0xE)
+                return self._read_int_correction_file(f)
+
+    def _write_correction_table(self, table):
+        assert len(table) == 65 * 65
+        self.write_cor_table(True)
+        first = True
+        for dx, dy in table:
+            self.write_cor_line(dx, dy, 0 if first else 1)
+            first = False
+
+    #######################
     # LASER PARAMETER SET
     #######################
 
@@ -867,35 +975,6 @@ class GalvoController:
         self.list_fiber_ylpm_pulse_width(self.pulse_width)
 
     #######################
-    # GPIO TOGGLE
-    #######################
-
-    def light_on(self):
-        if not self.is_port(self.light_pin):
-            self.port_on(self.light_pin)
-            return True
-        return False
-
-    def light_off(self):
-        if self.is_port(self.light_pin):
-            self.port_off(self.light_pin)
-            return True
-        return False
-
-    def is_port(self, bit):
-        return bool((1 << bit) & self._port_bits)
-
-    def port_on(self, bit):
-        self._port_bits = self._port_bits | (1 << bit)
-
-    def port_off(self, bit):
-        self._port_bits = ~((~self._port_bits) | (1 << bit))
-
-    def port_set(self, mask, values):
-        self._port_bits &= ~mask  # Unset mask.
-        self._port_bits |= values & mask  # Set masked bits.
-
-    #######################
     # UNIT CONVERSIONS
     #######################
 
@@ -928,86 +1007,6 @@ class GalvoController:
         @return:
         """
         return int(round(power * 0xFFF / 100.0))
-
-    #######################
-    # COR FILE MANAGEMENT
-    #######################
-
-    def write_correction_file(self, filename):
-        if filename is None:
-            self.write_blank_correct_file()
-            return
-        try:
-            table = self._read_correction_file(filename)
-            self._write_correction_table(table)
-        except OSError:
-            self.write_blank_correct_file()
-            return
-
-    @staticmethod
-    def get_scale_from_correction_file(filename):
-        with open(filename, "rb") as f:
-            label = f.read(0x16)
-            if label.decode("utf-16") == "LMC1COR_1.0":
-                unk = f.read(2)
-                return struct.unpack("63d", f.read(0x1F8))[43]
-            else:
-                unk = f.read(6)
-                return struct.unpack("d", f.read(8))[0]
-
-    def write_blank_correct_file(self):
-        self.write_cor_table(False)
-
-    def _read_float_correction_file(self, f):
-        """
-        Read table for cor files marked: LMC1COR_1.0
-        @param f:
-        @return:
-        """
-        table = []
-        for j in range(65):
-            for k in range(65):
-                dx = int(round(struct.unpack("d", f.read(8))[0]))
-                dx = dx if dx >= 0 else -dx + 0x8000
-                dy = int(round(struct.unpack("d", f.read(8))[0]))
-                dy = dy if dy >= 0 else -dy + 0x8000
-                table.append([dx & 0xFFFF, dy & 0xFFFF])
-        return table
-
-    def _read_int_correction_file(self, f):
-        table = []
-        for j in range(65):
-            for k in range(65):
-                dx = int.from_bytes(f.read(4), "little", signed=True)
-                dx = dx if dx >= 0 else -dx + 0x8000
-                dy = int.from_bytes(f.read(4), "little", signed=True)
-                dy = dy if dy >= 0 else -dy + 0x8000
-                table.append([dx & 0xFFFF, dy & 0xFFFF])
-        return table
-
-    def _read_correction_file(self, filename):
-        """
-        Reads a standard .cor file and builds a table from that.
-
-        @param filename:
-        @return:
-        """
-        with open(filename, "rb") as f:
-            label = f.read(0x16)
-            if label.decode("utf-16") == "LMC1COR_1.0":
-                header = f.read(0x1FA)
-                return self._read_float_correction_file(f)
-            else:
-                header = f.read(0xE)
-                return self._read_int_correction_file(f)
-
-    def _write_correction_table(self, table):
-        assert len(table) == 65 * 65
-        self.write_cor_table(True)
-        first = True
-        for dx, dy in table:
-            self.write_cor_line(dx, dy, 0 if first else 1)
-            first = False
 
     #######################
     # LIST MANGEMENT
