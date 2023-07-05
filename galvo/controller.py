@@ -8,6 +8,7 @@ to the hardware controller.
 import struct
 import threading
 import time
+from contextlib import contextmanager
 from copy import copy
 from .consts import *
 
@@ -299,6 +300,10 @@ class GalvoController:
         if self.mode == DRIVER_STATE_PROGRAM:
             return "busy", "program"
 
+    #######################
+    # Connection Handler
+    #######################
+
     @property
     def is_connected(self):
         """
@@ -430,6 +435,22 @@ class GalvoController:
     # MODE SHIFTS
     #######################
 
+    @contextmanager
+    def marking(self, *args, **kwargs):
+        try:
+            self.program_mode()
+            yield self
+        finally:
+            self.rapid_mode()
+
+    @contextmanager
+    def lighting(self, *args, **kwargs):
+        try:
+            self.light_mode()
+            yield self
+        finally:
+            self.rapid_mode()
+
     def rapid_mode(self):
         if self.mode == DRIVER_STATE_RAPID:
             return
@@ -511,7 +532,7 @@ class GalvoController:
         self.mode = DRIVER_STATE_LIGHT
 
     #######################
-    # LIST APPENDING OPERATIONS
+    # LIST MANGEMENT
     #######################
 
     def _list_end(self):
@@ -640,7 +661,7 @@ class GalvoController:
 
     def wait_for_input(self, mask, value):
         self.rapid_mode()
-        self._wait_for_input_protocol(q.input_mask, q.input_value)
+        self._wait_for_input_protocol(mask, value)
         self.program_mode()
 
     def _wait_for_input_protocol(self, input_mask, input_value):
@@ -678,7 +699,7 @@ class GalvoController:
         return self._last_x, self._last_y
 
     #######################
-    # Command Shortcuts
+    # WAIT STATE COMMANDS
     #######################
 
     def is_busy(self):
@@ -1035,7 +1056,7 @@ class GalvoController:
             first = False
 
     #######################
-    # COMMAND LIST COMMAND
+    # RAW LIST COMMAND
     #######################
 
     def list_jump(self, x, y, angle=0):
