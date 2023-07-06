@@ -41,50 +41,58 @@ The spooler serves to help facilitate sequential low-level interactions. While t
 
 
 ### States
-Unlike other parts of the system, the spooler is optional, and the spooler does not start automatically. It starts only when jobs are submitted. It continues until the queue has completed. Pausing the spooler will cause  
+Unlike other parts of the system, the spooler is optional, and the spooler does not start automatically. It starts only when jobs are submitted. It continues until the queue has completed. Pausing will block the spooler from starting the next job, or re-entering the current job.  
 
 
 ## Job
-Jobs primarily consist of a function to be called. This function returns `True` if the function was fully-processed. It will execute repeatedly by the spooler until it returns `True` to indicate completion. Between executions the spooler can be paused and abort, etc.
-
-There is `generate_job()` convenience method which allows you to yield the function to be called and the operands.
-```python
-    from galvo import GalvoController
-    controller = GalvoController()
-
-    def my_generator():
-        while True:
-            yield "dark", 0x8000, 0x8000
-            yield "light", 0x2000, 0x2000
-
-    controller.submit(controller.generate_job(my_generator))
-```
-
-### Lifecycle
-There are at least five job states.
-* `init`: This job exists, but it is not slated to be executed.
-* `queued`: This job is in the spooler queue.
-* `running`: This job is the currently running job in the spooler.
-* `finished`: This job finished naturally by returning `True` for its execution response.
-* `cancelled`: This job was cancelled while it was being executed, or before it was to be executed.
+Jobs primarily consist of a function to be called. This function should return `True` if the function was fully-processed. Otherwise, it will be executed repeatedly by the spooler until it such time as it returns `True` (which it may never do). Between executions the spooler can be paused, aborted, etc.
 
 
-# Plot
-There are three plotting states.
-* `rapid`: We are only sending realtime commands and no sequential command lists are being sent.
-* `program`: We should be sending marking packets the laser should be ready to fire.
-* `light`: We should only be sending lighting packets and the laser should not need to fire.
+# Laser Configurations
+There are three laser configurations.
+* `initial`: We are only sending realtime commands and no sequential command lists are being sent.
+* `marking`: We should be sending marking packets the laser should be ready to fire, we can also send lighting jobs. But, we require that all the attributes needed for marking should be fully initialized.
+* `lighting`: We should only be sending lighting packets and the laser should not need to fire, and may not be ready to fire.
 
-Do note that program mode can also send regular light commands, but in lighting mode some required states are not used
-and marking with the laser might not be possible.
 
-## Plotlike-commands
-The lower level api should interact with the ezcad2 lmc-controller, and provide plotlike commands for the major laser operations.
+# Midlevel commands
+The controller should have direct access to the all low level commands. This permits access to all the functions of the laser, however directly operating at this level is difficult.
 
-These commands are:
+### Plotlike commands
+
+The plotlike commands are used to send positional data to the laser. 
 * `.mark(x,y)` firing the laser with the given parameters to the given location.
 * `.goto(x,y)` move to a location regardless of the state of the redlight.
 * `.light(x,y)` move to a location using the outline redlight.
 * `.dark(x,y)` move to a location without the redlight being turned on.
+* `.dwell(time_in_ms)` fires the laser at the current position for the time specified.
+* `.wait(time_in_ms)` waits without the laser firing at the current position for the time specified.
 
-In many galvo setups you can toggle the light on and off and create shapes and outlines with the laser. This is especially true if you have specific control over the lighting state. The speed of each should be able to be set independently as there are good reasons to move more quickly with the redlight-off than when it's on.
+These commands also have their own speed settings. `mark_speed` is inherent to the laser, the remaining three `goto_speed`, `light_speed` and `dark_speed` have the `travel_speed` switched before the lower level `list_jump()` is called. Often you may want a different speed for movements with the laser off than you would for movements with the laser on.  
+
+### Helpers
+Midlevel realtime commands are executed realtime but require some additional code to be more helpful.
+
+#### Realtime
+* `.jog(x,y)` this does a realtime goto (called `goto_xy`) with correct distance calculations (needed to avoid a popping sound in the head).
+
+#### Hybrid
+This commands operated differently in different configurations. In `initial_configuration` this sends a realtime GPIO change, however in either `lighting` or `marking` it will send a list-sequential GPIO change.
+
+* `.light_on()` this turns the redlight on.
+* `.light_off()` this turns the redlight off.
+
+### contexts: marking()/lighting()
+There are context managers for the `controller.marking()` and `controller.lighting()` commands. These are shortcuts for setting the `controller.marking_configuration()` and then restoring this to `controller.initial_configuration()` when finished. And likewise for the `lighting()` command.
+
+```python
+    controller = GalvoController(settings_file="<my_settings>.json")
+    with controller.marking() as c:
+        c.goto(0x5000, 0x5000)
+        c.mark(0x5000, 0xA000)
+        c.mark(0xA000, 0xA000)
+        c.mark(0x5000, 0xA000)
+        c.mark(0x5000, 0x5000)
+    controller.wait_for_machine_idle()
+```
+This would, for example, mark draw a square. During the use of the `marking()` context, our commands are executed in the `controller.marking_configuration()` it's restored to the `initial_configuration` on exit which will execute any list commands in the buffer.
