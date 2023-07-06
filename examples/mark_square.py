@@ -1,3 +1,7 @@
+"""
+Marks a simple rectangle with the laser.
+"""
+
 from galvo.controller import GalvoController
 
 controller = GalvoController("default.json")

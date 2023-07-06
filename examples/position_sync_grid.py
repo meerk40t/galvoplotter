@@ -1,3 +1,7 @@
+"""
+Creates a 15x15 grid of locations turning the laser on for half a second in each location.
+"""
+
 from galvo.controller import GalvoController
 
 controller = GalvoController("default.json")

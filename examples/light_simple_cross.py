@@ -1,3 +1,7 @@
+"""
+Draws a simple cross (+) in light.
+"""
+
 from galvo.controller import GalvoController
 
 controller = GalvoController("default.json")
