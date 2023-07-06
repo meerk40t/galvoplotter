@@ -1,8 +1,14 @@
+import os
 import time
 import unittest
 from galvo import GalvoController, generate_job
 
 state = 0
+
+__location__ = os.path.realpath(
+    os.path.join(os.getcwd(), os.path.dirname(__file__)))
+
+__settings__ = os.path.join(__location__, 'test.json')
 
 
 def infinite_lighting_job(c):
@@ -35,7 +41,7 @@ class TestAPI(unittest.TestCase):
         Test passes if the job quits out at around ~2 seconds.
         :return:
         """
-        controller = GalvoController(settings_file="test.json")
+        controller = GalvoController(settings_file=__settings__)
         controller.submit(infinite_lighting_job)
         time.sleep(2)
         controller.shutdown()
@@ -47,7 +53,7 @@ class TestAPI(unittest.TestCase):
         Test passes if the job quits out at around ~2 seconds.
         :return:
         """
-        controller = GalvoController(settings_file="test.json")
+        controller = GalvoController(settings_file=__settings__)
         controller.submit(infinite_lighting_job)
         time.sleep(2)
         controller.remove(infinite_lighting_job)
@@ -59,7 +65,7 @@ class TestAPI(unittest.TestCase):
         Test passes if the job quits out at around ~4 seconds.
         :return:
         """
-        controller = GalvoController(settings_file="test.json")
+        controller = GalvoController(settings_file=__settings__)
         controller.submit(infinite_lighting_job)
         controller.submit(infinite_marking_job)
         time.sleep(2)
@@ -76,7 +82,7 @@ class TestAPI(unittest.TestCase):
         Test passes if the job quits out at around ~8 seconds (with paused execution).
         :return:
         """
-        controller = GalvoController(settings_file="test.json")
+        controller = GalvoController(settings_file=__settings__)
         controller.submit(infinite_lighting_job)
         time.sleep(2)
         self.assertIs(controller.current, infinite_lighting_job)
@@ -98,7 +104,7 @@ class TestAPI(unittest.TestCase):
         :return:
         """
 
-        controller = GalvoController(settings_file="test.json")
+        controller = GalvoController(settings_file=__settings__)
 
         def my_generator():
             while True:
@@ -116,7 +122,7 @@ class TestAPI(unittest.TestCase):
         Test passes if job quits after finish with print as last element.
         :return:
         """
-        controller = GalvoController(settings_file="test.json")
+        controller = GalvoController(settings_file=__settings__)
         controller.count = 0
 
         def my_job(c):
@@ -137,7 +143,7 @@ class TestAPI(unittest.TestCase):
         Test for marking a simple square.
         :return:
         """
-        c = GalvoController(settings_file="test.json")
+        c = GalvoController(settings_file=__settings__)
         with c.marking():
             c.goto(0x5000, 0x5000)
             c.mark(0x5000, 0xA000)
@@ -152,7 +158,7 @@ class TestAPI(unittest.TestCase):
         Test for a grid of lit points.
         :return:
         """
-        controller = GalvoController(settings_file="test.json")
+        controller = GalvoController(settings_file=__settings__)
         with controller.lighting() as c:
             for x in range(0x1000, 0xFFFF, 0x1000):
                 for y in range(0x1000, 0xFFFF, 0x1000):
