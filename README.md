@@ -99,7 +99,7 @@ There are context managers for the `controller.marking()` and `controller.lighti
     controller = GalvoController(settings_file="<my_settings>.json")
     with controller.marking() as c:
         c.goto(0x8000, 0x8000)
-        m.dwell(100)
+        c.dwell(100)
     controller.wait_for_machine_idle()
 ```
 This would, for example, mark draw a square. During the use of the `marking()` context, our commands are executed in the `controller.marking_configuration()` it's restored to the `initial_configuration` on exit which will execute any list commands in the buffer.
