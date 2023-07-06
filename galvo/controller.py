@@ -641,6 +641,40 @@ class GalvoController:
             if not self._sending:
                 return
 
+    #######################
+    # WAIT SPOOLER COMMANDS
+    #######################
+
+    def spooler_wait_for_job_sent(self, job):
+        assert (threading.current_thread() is not self._spooler_thread)
+        with self._spooler_lock:
+            if job not in self._queue:
+                # Waiting for job that does not exist.
+                return
+            self._spooler_lock.wait()
+
+    def wait_for_machine_idle(self):
+        """
+        Block the current thread until system is idle
+        :return:
+        """
+        assert(threading.current_thread() is not self._spooler_thread)
+        self.wait_for_spooler_send()
+        self.wait_finished()
+
+    def wait_for_spooler_send(self):
+        """
+        Block the current thread until the spooler has finished sending all of its jobs.
+
+        Note: This may be simply after the jobs have spooled, and not necessarily when they have finished.
+
+        :return:
+        """
+        assert (threading.current_thread() is not self._spooler_thread)
+        while self._queue:
+            with self._spooler_lock:
+                self._spooler_lock.wait()
+
     def abort(self, dummy_packet=True):
         with self._list_build_lock:
             self.stop_execute()
