@@ -29,6 +29,30 @@ class TestAPI(unittest.TestCase):
         time.sleep(2)
         controller.shutdown()
 
+    def test_api_cancel_job(self):
+        """
+        Test submission of a test job with shutdown.
+
+        Test passes if the job quits out at around ~2 seconds.
+        :return:
+        """
+        controller = GalvoController(settings_file="test.json")
+
+        def my_job(c):
+            """
+            Never indicates job is finished.
+            :return:
+            """
+            c.lighting_configuration()
+            c.dark(0x8000, 0x8000)
+            c.light(0x2000, 0x2000)
+            return False
+
+        controller.submit(my_job)
+        time.sleep(2)
+        controller.remove(my_job)
+
+
     def test_api_generator(self):
         """
         Test submission of a generator test job, with shutdown.
