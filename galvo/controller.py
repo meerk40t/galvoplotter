@@ -426,22 +426,6 @@ class GalvoController:
     # MODE SHIFTS
     #######################
 
-    @contextmanager
-    def marking(self, *args, **kwargs):
-        try:
-            self.marking_configuration()
-            yield self
-        finally:
-            self.initial_configuration()
-
-    @contextmanager
-    def lighting(self, *args, **kwargs):
-        try:
-            self.lighting_configuration()
-            yield self
-        finally:
-            self.initial_configuration()
-
     def initial_configuration(self):
         if self.laser_configuration == "initial":
             return
