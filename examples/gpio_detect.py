@@ -5,8 +5,9 @@ Pressing escape quits.
 Connection happens automatically at the first issue of realtime `write_port()` command.
 """
 
-from galvo.controller import GalvoController
 from pynput import keyboard
+
+from galvo.controller import GalvoController
 
 controller = GalvoController("default.json")
 

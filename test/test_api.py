@@ -1,14 +1,14 @@
 import os
 import time
 import unittest
+
 from galvo import GalvoController, generate_job
 
 state = 0
 
-__location__ = os.path.realpath(
-    os.path.join(os.getcwd(), os.path.dirname(__file__)))
+__location__ = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__)))
 
-__settings__ = os.path.join(__location__, 'test.json')
+__settings__ = os.path.join(__location__, "test.json")
 
 
 def infinite_lighting_job(c):
@@ -152,6 +152,18 @@ class TestAPI(unittest.TestCase):
             c.mark(0x5000, 0x5000)
         c.wait_for_machine_idle()
         print("test_mark_square: final line or test fail.")
+
+    def test_fire_center(self):
+        """
+        Test for firing laser 100ms in center of lens.
+        :return:
+        """
+        c = GalvoController(settings_file=__settings__)
+        with c.marking() as c:
+            c.set_frequency(25.4)  # Set frequency to 25.4kHz
+            c.goto(0x8000, 0x8000)
+            c.dwell(100)
+        c.wait_for_machine_idle()
 
     def test_grid_stops(self):
         """
