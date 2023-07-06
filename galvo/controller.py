@@ -243,6 +243,7 @@ class GalvoController:
             if fully_executed:
                 # all work finished
                 self.remove(program)
+                self.initial_configuration()
 
     @property
     def current(self):
