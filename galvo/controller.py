@@ -616,7 +616,7 @@ class GalvoController:
             else:
                 passes = 0
 
-    def set_xy(self, x, y):
+    def jog(self, x, y):
         distance = int(abs(complex(x, y) - complex(self._last_x, self._last_y)))
         if distance > 0xFFFF:
             distance = 0xFFFF
