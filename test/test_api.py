@@ -45,6 +45,6 @@ class TestAPI(unittest.TestCase):
                 yield "dark", 0x8000, 0x8000
                 yield "light", 0x2000, 0x2000
 
-        controller.submit(controller.generate_job(my_generator))
+        controller.submit(generate_job(my_generator))
         time.sleep(2)
         controller.shutdown()
