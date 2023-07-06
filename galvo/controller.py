@@ -443,9 +443,8 @@ class GalvoController:
             return
         if self.laser_configuration == "lighting":
             self.laser_configuration = "marking"
-            self.light_off()
             self.port_on(bit=self.laser_pin)
-            self.write_port()
+            self.light_off()
             self.set_fiber_mo(1)
         else:
             self.laser_configuration = "marking"
@@ -540,8 +539,7 @@ class GalvoController:
             long = self.delay_jump_long
         if short is None:
             short = self.delay_jump_short
-        if self.light_on():
-            self.list_write_port()
+        self.light_on()
         if self._light_speed is not None:
             self.set_travel_speed(self._light_speed)
         distance = int(abs(complex(x, y) - complex(self._last_x, self._last_y)))
@@ -560,8 +558,7 @@ class GalvoController:
             long = self.delay_jump_long
         if short is None:
             short = self.delay_jump_short
-        if self.light_off():
-            self.list_write_port()
+        self.light_off()
         if self._dark_speed is not None:
             self.set_travel_speed(self._dark_speed)
         distance = int(abs(complex(x, y) - complex(self._last_x, self._last_y)))
@@ -621,6 +618,34 @@ class GalvoController:
         if distance > 0xFFFF:
             distance = 0xFFFF
         self.goto_xy(x, y, distance=distance)
+
+    def light_on(self, override_list=None):
+        if not self.is_port(self.light_pin):
+            self.port_on(self.light_pin)
+        else:
+            # Was already on.
+            return
+        use_list = self.laser_configuration in ("lighting", "marking")
+        if override_list is not None:
+            use_list = override_list
+        if use_list:
+            self.list_write_port()
+        else:
+            self.write_port()
+
+    def light_off(self, override_list=None):
+        if self.is_port(self.light_pin):
+            self.port_off(self.light_pin)
+        else:
+            # Was already off.
+            return
+        use_list = self.laser_configuration in ("lighting", "marking")
+        if override_list is not None:
+            use_list = override_list
+        if use_list:
+            self.list_write_port()
+        else:
+            self.write_port()
 
     def get_last_xy(self):
         return self._last_x, self._last_y
@@ -773,18 +798,6 @@ class GalvoController:
     #######################
     # GPIO TOGGLE
     #######################
-
-    def light_on(self):
-        if not self.is_port(self.light_pin):
-            self.port_on(self.light_pin)
-            return True
-        return False
-
-    def light_off(self):
-        if self.is_port(self.light_pin):
-            self.port_off(self.light_pin)
-            return True
-        return False
 
     def is_port(self, bit):
         return bool((1 << bit) & self._port_bits)

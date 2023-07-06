@@ -44,7 +44,6 @@ def main():
 
     try:
         controller.light_on()
-        controller.write_port()
 
         while True:
             pygame.event.get()
