@@ -13,6 +13,24 @@ from galvo.controller import GalvoController
 controller = GalvoController("default.json")
 
 
+def fire_at_position(x: int, y: int, time_in_ms: float = 100):
+    """
+    Reusable command. Fires at position x,y for the given amount of time.
+    :param x: x position to fire at.
+    :param y: y position to fire at.
+    :param time_in_ms: time to fire for.
+    :return:
+    """
+
+    def func(m):
+        with m.marking():
+            m.goto(x, y)
+            m.dwell(time_in_ms)
+            return True
+
+    return func
+
+
 def main():
     pygame.init()
     pygame.joystick.init()
@@ -35,15 +53,10 @@ def main():
             # Read joystick buttons
             fire_button = joystick.get_button(0)
             print("X-axis: {:04X}  Y-axis: {:04X}".format(x_axis, y_axis))
-            controller.goto_xy(x_axis, y_axis)
+            controller.jog(x_axis, y_axis)
             if fire_button:
-                def fire_at_xy():
-                    with controller.marking() as m:
-                        m.goto(x_axis, y_axis)
-                        m.dwell(100)
-                    return True
-
-                controller.submit(fire_at_xy)
+                controller.submit(fire_at_position(x_axis, y_axis))
+                controller.wait_for_machine_idle()
     except KeyboardInterrupt:
         joystick.quit()
 

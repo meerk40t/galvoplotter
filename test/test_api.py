@@ -74,16 +74,15 @@ class TestAPI(unittest.TestCase):
 
         controller.submit(my_job)
         controller.wait_for_machine_idle()
-        print("final line...")
+        print("test_api_wait: final line or test fail")
 
     def test_mark_square(self):
         c = GalvoController(settings_file="test.json")
-        c.marking_configuration()
-        c.goto(0x5000, 0x5000)
-        c.mark(0x5000, 0xA000)
-        c.mark(0xA000, 0xA000)
-        c.mark(0x5000, 0xA000)
-        c.mark(0x5000, 0x5000)
-        c.initial_configuration()
+        with c.marking():
+            c.goto(0x5000, 0x5000)
+            c.mark(0x5000, 0xA000)
+            c.mark(0xA000, 0xA000)
+            c.mark(0x5000, 0xA000)
+            c.mark(0x5000, 0x5000)
         c.wait_for_machine_idle()
-        print("final line...")
+        print("test_mark_square: final line or test fail.")
