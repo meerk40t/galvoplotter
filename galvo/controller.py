@@ -215,7 +215,7 @@ class GalvoController:
 
         :return:
         """
-        while not self._shutdown:
+        while self._queue:
             with self._spooler_lock:
                 if self.paused:
                     self._spooler_lock.wait()
@@ -223,11 +223,8 @@ class GalvoController:
                 try:
                     program = self._queue[0]
                 except IndexError:
-                    if self._shutdown:
-                        return
                     # There is no work to do.
-                    self._spooler_lock.wait()
-                    continue
+                    return
             self._current = program
             if self._shutdown:
                 return
@@ -247,6 +244,7 @@ class GalvoController:
                 # all work finished
                 self.remove(program)
                 self.initial_configuration()
+        self._spooler_thread = None
 
     @property
     def current(self):
@@ -313,16 +311,7 @@ class GalvoController:
         empty or not fully executed.
         :return:
         """
-        return self.can_spool and len(self._queue)
-
-    @property
-    def can_spool(self):
-        """
-        Check whether the controller is accepting job submissions. This should be true for most of the lifecycle except
-        after and during shutdown.
-        :return:
-        """
-        return not self._shutdown
+        return not self._shutdown and len(self._queue)
 
     def abort_connect(self):
         self._abort_open = True
