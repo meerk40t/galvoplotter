@@ -8,15 +8,13 @@ to the hardware controller.
 import struct
 import threading
 import time
+from contextlib import contextmanager
 from copy import copy
 from .consts import *
 
 from .mock_connection import MockConnection
 from .usb_connection import USBConnection
 
-DRIVER_STATE_RAPID = "rapid"
-DRIVER_STATE_LIGHT = "light"
-DRIVER_STATE_PROGRAM = "program"
 
 BUSY = 0x04
 READY = 0x20
@@ -61,10 +59,10 @@ class GalvoController:
         delay_mode=1,
         laser_mode=1,
         control_mode=0,
-        fpk2_max_voltage=0xFFB,
-        fpk2_min_voltage=1,
-        fpk2_t1=409,
-        fpk2_t2=100,
+        fpk_max_voltage=0xFFB,
+        fpk_min_voltage=1,
+        fpk_t1=409,
+        fpk_t2=100,
         fly_resolution_1=0,
         fly_resolution_2=99,
         fly_resolution_3=1000,
@@ -76,13 +74,21 @@ class GalvoController:
         delay_open_mo=8.0,
         delay_jump_short=8,
         delay_jump_long=200.0,
+        input_passes_required=3,
         mock=False,
         machine_index=0,
         usb_log=None,
     ):
-        self.lock = threading.RLock()
+        self._shutdown = False
+        self._sending = True
+
+        self._spooler_lock = threading.Condition()
+        self._queue = []
+        self._current = None
+        self._spooler_thread = None
+
+        self._list_build_lock = threading.RLock()
         self.mock = mock
-        self.is_shutdown = False  # Shutdown finished.
         self.connection = None
         self.light_pin = light_pin
         self.footpedal_pin = foot_pin
@@ -90,6 +96,9 @@ class GalvoController:
         self.galvos_per_mm = galvos_per_mm
 
         self.mark_speed = mark_speed
+        self.goto_speed = goto_speed
+        self.light_speed = light_speed
+        self.dark_speed = dark_speed
         self.travel_speed = travel_speed
         self.power = power
         self.frequency = frequency
@@ -104,14 +113,15 @@ class GalvoController:
         self.delay_mode = delay_mode
         self.laser_mode = laser_mode
         self.control_mode = control_mode
-        self.fpk_max_voltage = fpk2_max_voltage
-        self.fpk_min_voltage = fpk2_min_voltage
-        self.fpk_t1 = fpk2_t1
-        self.fpk_t2 = fpk2_t2
+        self.fpk_max_voltage = fpk_max_voltage
+        self.fpk_min_voltage = fpk_min_voltage
+        self.fpk_t1 = fpk_t1
+        self.fpk_t2 = fpk_t2
         self.fly_resolution_1 = fly_resolution_1
         self.fly_resolution_2 = fly_resolution_2
         self.fly_resolution_3 = fly_resolution_3
         self.fly_resolution_4 = fly_resolution_4
+        self.input_passes_required = input_passes_required
 
         self.pulse_width = pulse_width
 
@@ -125,13 +135,13 @@ class GalvoController:
 
         # Running attributes
         self._usb_log = usb_log
-        self._is_opening = False
+        self._is_connecting_to_laser = False
         self._abort_open = False
         self._disable_connect = False
 
         self._port_bits = 0
         self._machine_index = machine_index
-        self.mode = DRIVER_STATE_RAPID
+        self.laser_configuration = "initial"
         self._active_list = None
         self._active_index = 0
         self._list_executing = False
@@ -141,10 +151,6 @@ class GalvoController:
         # Set attributes, these are actively sent to the controller already.
         self._last_x = x
         self._last_y = y
-        self._mark_speed = mark_speed
-        self._goto_speed = goto_speed
-        self._light_speed = light_speed
-        self._dark_speed = dark_speed
 
         self._ready = None
         self._speed = None
@@ -163,14 +169,92 @@ class GalvoController:
             with open(settings_file, 'r') as fp:
                 self.__dict__.update(json.load(fp))
 
-    def __enter__(self):
-        self.connect_if_needed()
-        self.program_mode()
-        return self
+    #######################
+    # SPOOLER MANAGEMENT
+    #######################
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.rapid_mode()
-        self.disconnect()
+    def submit(self, job):
+        with self._spooler_lock:
+            self._queue.append(job)
+            self._spooler_lock.notify_all()
+        self.start()
+
+    def remove(self, element):
+        with self._spooler_lock:
+            for i in range(len(self._queue) - 1, -1, -1):
+                e = self._queue[i]
+                if e is element:
+                    del self._queue[i]
+            self._spooler_lock.notify_all()
+
+    def shutdown(self, *args, **kwargs):
+        self._shutdown = True
+        with self._spooler_lock:
+            try:
+                # If something is currently processing stop it.
+                self._current.stop()
+            except AttributeError:
+                pass
+            self._spooler_lock.notify_all()
+            self._queue.clear()
+            self.abort()
+        if self._spooler_thread:
+            self._spooler_thread.join()
+        if self.is_connected:
+            self.disconnect()
+
+    def start(self):
+        self._shutdown = False
+        if not self._spooler_thread:
+            self._spooler_thread = threading.Thread(target=self._spooler_run)
+            self._spooler_thread.start()
+
+    def _spooler_run(self):
+        """
+        Spooler run thread. While the controller is not shutdown we read the queue and execute whatever functions are
+        located in the queue. The jobs return whether they were fully_executed. If they were they are removed
+        as completed and the next item in queue is processed.
+
+        :return:
+        """
+        while self._queue:
+            with self._spooler_lock:
+                if self.paused:
+                    self._spooler_lock.wait()
+                    continue
+                try:
+                    program = self._queue[0]
+                except IndexError:
+                    # There is no work to do.
+                    return
+            self._current = program
+            if self._shutdown:
+                return
+            try:
+                fully_executed = program(self)
+            except ConnectionAbortedError:
+                # Driver could no longer connect to where it was told to send the data.
+                return
+            except ConnectionRefusedError:
+                # Driver connection failed but, we are not giving up.
+                if self._shutdown:
+                    return
+                with self._spooler_lock:
+                    self._spooler_lock.wait()
+                continue
+            if fully_executed:
+                # all work finished
+                self.remove(program)
+                self.initial_configuration()
+        self._spooler_thread = None
+
+    @property
+    def current(self):
+        return self._current
+
+    @property
+    def queue(self):
+        return self._queue
 
     def usb_log(self, data):
         if self._usb_log:
@@ -178,32 +262,58 @@ class GalvoController:
 
     @property
     def state(self):
-        if self.mode == DRIVER_STATE_RAPID:
+        if self.laser_configuration == "initial":
             return "idle", "idle"
         if self.paused:
             return "hold", "paused"
-        if self.mode == DRIVER_STATE_LIGHT:
-            return "busy", "light"
-        if self.mode == DRIVER_STATE_PROGRAM:
-            return "busy", "program"
+        if self.laser_configuration == "lighting":
+            return "busy", "lighting"
+        if self.laser_configuration == "marking":
+            return "busy", "marking"
 
-    def set_disable_connect(self, status):
-        self._disable_connect = status
-
-    def shutdown(self, *args, **kwargs):
-        self.is_shutdown = True
+    #######################
+    # Connection Handler
+    #######################
 
     @property
-    def connected(self):
+    def is_connected(self):
+        """
+        Check whether the controller state is connected to the laser.
+        :return:
+        """
         if self.connection is None:
             return False
         return self.connection.is_open(self._machine_index)
 
     @property
     def is_connecting(self):
+        """
+        Check whether the controller state is current connecting (but not yet connected) to the laser.
+        :return:
+        """
         if self.connection is None:
             return False
-        return self._is_opening
+        return self._is_connecting_to_laser
+
+    @property
+    def is_connection_allowed(self):
+        """
+        Check whether the controller state currently allows connection attempts.
+
+        To clear this state requires calling `disconnect()` directly. The connection failed and all commands should
+        issue a `ConnectionRefusedError`.
+        :return:
+        """
+        return not self._disable_connect
+
+    @property
+    def is_executing(self):
+        """
+        Check whether the controller is executing a list-command queue. This should be true anytime the queue is not
+        empty or not fully executed.
+        :return:
+        """
+        return not self._shutdown and len(self._queue)
 
     def abort_connect(self):
         self._abort_open = True
@@ -216,7 +326,7 @@ class GalvoController:
             pass
         self.connection = None
         # Reset error to allow another attempt
-        self.set_disable_connect(False)
+        self._disable_connect = False
 
     def connect_if_needed(self):
         if self._disable_connect:
@@ -233,7 +343,7 @@ class GalvoController:
                 self.connection.recv = print
             else:
                 self.connection = USBConnection(self.usb_log)
-        self._is_opening = True
+        self._is_connecting_to_laser = True
         self._abort_open = False
         count = 0
         while not self.connection.is_open(self._machine_index):
@@ -244,17 +354,16 @@ class GalvoController:
             except (ConnectionError, ConnectionRefusedError):
                 time.sleep(0.3)
                 count += 1
-                # self.usb_log(f"Error-Routine pass #{count}")
-                if self.is_shutdown or self._abort_open:
-                    self._is_opening = False
+                if not self._sending or self._abort_open:
+                    self._is_connecting_to_laser = False
                     self._abort_open = False
                     return
                 if self.connection.is_open(self._machine_index):
                     self.connection.close(self._machine_index)
                 if count >= 10:
                     # We have failed too many times.
-                    self._is_opening = False
-                    self.set_disable_connect(True)
+                    self._is_connecting_to_laser = False
+                    self._disable_connect = True
                     self.usb_log("Could not connect to the LMC controller.")
                     self.usb_log("Automatic connections disabled.")
                     raise ConnectionRefusedError(
@@ -262,11 +371,11 @@ class GalvoController:
                     )
                 time.sleep(0.3)
                 continue
-        self._is_opening = False
+        self._is_connecting_to_laser = False
         self._abort_open = False
 
     def send(self, data, read=True):
-        if self.is_shutdown:
+        if not self._sending:
             return -1, -1, -1, -1
         self.connect_if_needed()
         try:
@@ -288,8 +397,24 @@ class GalvoController:
     # MODE SHIFTS
     #######################
 
-    def rapid_mode(self):
-        if self.mode == DRIVER_STATE_RAPID:
+    @contextmanager
+    def marking(self):
+        self.marking_configuration()
+        try:
+            yield self
+        finally:
+            self.initial_configuration()
+
+    @contextmanager
+    def lighting(self):
+        self.lighting_configuration()
+        try:
+            yield self
+        finally:
+            self.initial_configuration()
+
+    def initial_configuration(self):
+        if self.laser_configuration == "initial":
             return
         self.list_end_of_list()  # Ensure at least one list_end_of_list
         self._list_end()
@@ -304,19 +429,18 @@ class GalvoController:
         self.write_port()
         marktime = self.get_mark_time()
         self.usb_log(f"Time taken for list execution: {marktime}")
-        self.mode = DRIVER_STATE_RAPID
+        self.laser_configuration = "initial"
 
-    def program_mode(self):
-        if self.mode == DRIVER_STATE_PROGRAM:
+    def marking_configuration(self):
+        if self.laser_configuration == "marking":
             return
-        if self.mode == DRIVER_STATE_LIGHT:
-            self.mode = DRIVER_STATE_PROGRAM
-            self.light_off()
+        if self.laser_configuration == "lighting":
+            self.laser_configuration = "marking"
             self.port_on(bit=self.laser_pin)
-            self.write_port()
+            self.light_off()
             self.set_fiber_mo(1)
         else:
-            self.mode = DRIVER_STATE_PROGRAM
+            self.laser_configuration = "marking"
             self.reset_list()
             self.port_on(bit=self.laser_pin)
             self.write_port()
@@ -339,10 +463,10 @@ class GalvoController:
             self.list_write_port()
         self.set()
 
-    def light_mode(self):
-        if self.mode == DRIVER_STATE_LIGHT:
+    def lighting_configuration(self):
+        if self.laser_configuration == "lighting":
             return
-        if self.mode == DRIVER_STATE_PROGRAM:
+        if self.laser_configuration == "marking":
             self.set_fiber_mo(0)
             self.port_off(self.laser_pin)
             self.port_on(self.light_pin)
@@ -366,49 +490,7 @@ class GalvoController:
             self.port_off(self.laser_pin)
             self.port_on(self.light_pin)
             self.list_write_port()
-        self.mode = DRIVER_STATE_LIGHT
-
-    #######################
-    # LIST APPENDING OPERATIONS
-    #######################
-
-    def _list_end(self):
-        with self.lock:
-            if self._active_list and self._active_index:
-                self.wait_ready()
-                while self.paused:
-                    time.sleep(0.3)
-                self.send(self._active_list, False)
-                self.set_end_of_list(0)
-                self._number_of_list_packets += 1
-                self._active_list = None
-                self._active_index = 0
-                if self._number_of_list_packets > 2 and not self._list_executing:
-                    self.execute_list()
-                    self._list_executing = True
-
-    def _list_new(self):
-        with self.lock:
-            self._active_list = copy(empty)
-            self._active_index = 0
-
-    def _list_write(self, command, v1=0, v2=0, v3=0, v4=0, v5=0):
-        if self._active_index >= 0xC00:
-            self._list_end()
-        if self.lock:
-            if self._active_list is None:
-                self._list_new()
-            index = self._active_index
-            self._active_list[index : index + 12] = struct.pack(
-                "<6H", int(command), int(v1), int(v2), int(v3), int(v4), int(v5)
-            )
-            self._active_index += 12
-
-    def _command(self, command, v1=0, v2=0, v3=0, v4=0, v5=0, read=True):
-        cmd = struct.pack(
-            "<6H", int(command), int(v1), int(v2), int(v3), int(v4), int(v5)
-        )
-        return self.send(cmd, read=read)
+        self.laser_configuration = "lighting"
 
     #######################
     # PLOTLIKE SHORTCUTS
@@ -432,8 +514,8 @@ class GalvoController:
             long = self.delay_jump_long
         if short is None:
             short = self.delay_jump_short
-        if self._goto_speed is not None:
-            self.set_travel_speed(self._goto_speed)
+        if self.goto_speed is not None:
+            self.set_travel_speed(self.goto_speed)
         distance = int(abs(complex(x, y) - complex(self._last_x, self._last_y)))
         delay = long if distance_limit and distance > distance_limit else short
         if delay:
@@ -450,10 +532,9 @@ class GalvoController:
             long = self.delay_jump_long
         if short is None:
             short = self.delay_jump_short
-        if self.light_on():
-            self.list_write_port()
-        if self._light_speed is not None:
-            self.set_travel_speed(self._light_speed)
+        self.light_on()
+        if self.light_speed is not None:
+            self.set_travel_speed(self.light_speed)
         distance = int(abs(complex(x, y) - complex(self._last_x, self._last_y)))
         delay = long if distance_limit and distance > distance_limit else short
         if delay:
@@ -470,27 +551,100 @@ class GalvoController:
             long = self.delay_jump_long
         if short is None:
             short = self.delay_jump_short
-        if self.light_off():
-            self.list_write_port()
-        if self._dark_speed is not None:
-            self.set_travel_speed(self._dark_speed)
+        self.light_off()
+        if self.dark_speed is not None:
+            self.set_travel_speed(self.dark_speed)
         distance = int(abs(complex(x, y) - complex(self._last_x, self._last_y)))
         delay = long if distance_limit and distance > distance_limit else short
         if delay:
             self.set_delay_jump(delay)
         self.list_jump(x, y)
 
-    def set_xy(self, x, y):
+    def dwell(self, time_in_ms, delay_end=True):
+        dwell_time = time_in_ms * 100  # Dwell time in ms units in 10 us
+        while dwell_time > 0:
+            d = min(dwell_time, 60000)
+            self.list_laser_on_point(int(d))
+            dwell_time -= d
+        if delay_end:
+            self.list_delay_time(int(self.delay_end / 10.0))
+
+    def wait(self, time_in_ms):
+        dwell_time = time_in_ms * 100  # Dwell time in ms units in 10 us
+        while dwell_time > 0:
+            d = min(dwell_time, 60000)
+            self.list_delay_time(int(d))
+            dwell_time -= d
+
+    def wait_for_input(self, mask, value):
+        self.initial_configuration()
+        self._wait_for_input_protocol(mask, value)
+        self.marking_configuration()
+
+    def _wait_for_input_protocol(self, input_mask, input_value):
+        required_passes = self.input_passes_required
+        passes = 0
+        while (
+            self.connection and not self.connection.is_shutdown and not self._aborting
+        ):
+            read_port = self.connection.read_port()
+            b = read_port[1]
+            all_matched = True
+            for i in range(16):
+                if (input_mask >> i) & 1 == 0:
+                    continue  # We don't care about this mask.
+                if (input_value >> i) & 1 != (b >> i) & 1:
+                    all_matched = False
+                    time.sleep(0.05)
+                    break
+
+            if all_matched:
+                passes += 1
+                if passes > required_passes:
+                    # Success, we matched the wait for protocol.
+                    return
+            else:
+                passes = 0
+
+    def jog(self, x, y):
         distance = int(abs(complex(x, y) - complex(self._last_x, self._last_y)))
         if distance > 0xFFFF:
             distance = 0xFFFF
         self.goto_xy(x, y, distance=distance)
 
+    def light_on(self, override_list=None):
+        if not self.is_port(self.light_pin):
+            self.port_on(self.light_pin)
+        else:
+            # Was already on.
+            return
+        use_list = self.laser_configuration in ("lighting", "marking")
+        if override_list is not None:
+            use_list = override_list
+        if use_list:
+            self.list_write_port()
+        else:
+            self.write_port()
+
+    def light_off(self, override_list=None):
+        if self.is_port(self.light_pin):
+            self.port_off(self.light_pin)
+        else:
+            # Was already off.
+            return
+        use_list = self.laser_configuration in ("lighting", "marking")
+        if override_list is not None:
+            use_list = override_list
+        if use_list:
+            self.list_write_port()
+        else:
+            self.write_port()
+
     def get_last_xy(self):
         return self._last_x, self._last_y
 
     #######################
-    # Command Shortcuts
+    # WAIT STATE COMMANDS
     #######################
 
     def is_busy(self):
@@ -508,23 +662,57 @@ class GalvoController:
     def wait_finished(self):
         while not self.is_ready_and_not_busy():
             time.sleep(0.01)
-            if self.is_shutdown:
+            if not self._sending:
                 return
 
     def wait_ready(self):
         while not self.is_ready():
             time.sleep(0.01)
-            if self.is_shutdown:
+            if not self._sending:
                 return
 
     def wait_idle(self):
         while self.is_busy():
             time.sleep(0.01)
-            if self.is_shutdown:
+            if not self._sending:
                 return
 
+    #######################
+    # WAIT SPOOLER COMMANDS
+    #######################
+
+    def wait_for_spooler_job_sent(self, job):
+        assert (threading.current_thread() is not self._spooler_thread)
+        with self._spooler_lock:
+            if job not in self._queue:
+                # Waiting for job that does not exist.
+                return
+            self._spooler_lock.wait()
+
+    def wait_for_machine_idle(self):
+        """
+        Block the current thread until system is idle
+        :return:
+        """
+        assert(threading.current_thread() is not self._spooler_thread)
+        self.wait_for_spooler_send()
+        self.wait_finished()
+
+    def wait_for_spooler_send(self):
+        """
+        Block the current thread until the spooler has finished sending all of its jobs.
+
+        Note: This may be simply after the jobs have spooled, and not necessarily when they have finished.
+
+        :return:
+        """
+        assert (threading.current_thread() is not self._spooler_thread)
+        while self._queue:
+            with self._spooler_lock:
+                self._spooler_lock.wait()
+
     def abort(self, dummy_packet=True):
-        with self.lock:
+        with self._list_build_lock:
             self.stop_execute()
             self.set_fiber_mo(0)
             self.reset_list()
@@ -539,7 +727,7 @@ class GalvoController:
             self.set_fiber_mo(0)
             self.port_off(self.laser_pin)
             self.write_port()
-            self.mode = DRIVER_STATE_RAPID
+            self.laser_configuration = "initial"
 
     def pause(self):
         self.paused = True
@@ -548,6 +736,8 @@ class GalvoController:
     def resume(self):
         self.restart_list()
         self.paused = False
+        with self._spooler_lock:
+            self._spooler_lock.notify_all()
 
     def init_laser(self):
         self.usb_log("Initializing Laser")
@@ -601,7 +791,104 @@ class GalvoController:
         self.usb_log("Ready")
 
     #######################
-    # Attributes Set
+    # GPIO TOGGLE
+    #######################
+
+    def is_port(self, bit):
+        return bool((1 << bit) & self._port_bits)
+
+    def port_on(self, bit):
+        self._port_bits = self._port_bits | (1 << bit)
+
+    def port_off(self, bit):
+        self._port_bits = ~((~self._port_bits) | (1 << bit))
+
+    def port_set(self, mask, values):
+        self._port_bits &= ~mask  # Unset mask.
+        self._port_bits |= values & mask  # Set masked bits.
+
+    #######################
+    # COR FILE MANAGEMENT
+    #######################
+
+    def write_correction_file(self, filename):
+        if filename is None:
+            self.write_blank_correct_file()
+            return
+        try:
+            table = self._read_correction_file(filename)
+            self._write_correction_table(table)
+        except OSError:
+            self.write_blank_correct_file()
+            return
+
+    @staticmethod
+    def get_scale_from_correction_file(filename):
+        with open(filename, "rb") as f:
+            label = f.read(0x16)
+            if label.decode("utf-16") == "LMC1COR_1.0":
+                unk = f.read(2)
+                return struct.unpack("63d", f.read(0x1F8))[43]
+            else:
+                unk = f.read(6)
+                return struct.unpack("d", f.read(8))[0]
+
+    def write_blank_correct_file(self):
+        self.write_cor_table(False)
+
+    def _read_float_correction_file(self, f):
+        """
+        Read table for cor files marked: LMC1COR_1.0
+        @param f:
+        @return:
+        """
+        table = []
+        for j in range(65):
+            for k in range(65):
+                dx = int(round(struct.unpack("d", f.read(8))[0]))
+                dx = dx if dx >= 0 else -dx + 0x8000
+                dy = int(round(struct.unpack("d", f.read(8))[0]))
+                dy = dy if dy >= 0 else -dy + 0x8000
+                table.append([dx & 0xFFFF, dy & 0xFFFF])
+        return table
+
+    def _read_int_correction_file(self, f):
+        table = []
+        for j in range(65):
+            for k in range(65):
+                dx = int.from_bytes(f.read(4), "little", signed=True)
+                dx = dx if dx >= 0 else -dx + 0x8000
+                dy = int.from_bytes(f.read(4), "little", signed=True)
+                dy = dy if dy >= 0 else -dy + 0x8000
+                table.append([dx & 0xFFFF, dy & 0xFFFF])
+        return table
+
+    def _read_correction_file(self, filename):
+        """
+        Reads a standard .cor file and builds a table from that.
+
+        @param filename:
+        @return:
+        """
+        with open(filename, "rb") as f:
+            label = f.read(0x16)
+            if label.decode("utf-16") == "LMC1COR_1.0":
+                header = f.read(0x1FA)
+                return self._read_float_correction_file(f)
+            else:
+                header = f.read(0xE)
+                return self._read_int_correction_file(f)
+
+    def _write_correction_table(self, table):
+        assert len(table) == 65 * 65
+        self.write_cor_table(True)
+        first = True
+        for dx, dy in table:
+            self.write_cor_line(dx, dy, 0 if first else 1)
+            first = False
+
+    #######################
+    # LASER PARAMETER SET
     #######################
 
     def set(
@@ -704,35 +991,6 @@ class GalvoController:
         self.list_fiber_ylpm_pulse_width(self.pulse_width)
 
     #######################
-    # Port Configure
-    #######################
-
-    def light_on(self):
-        if not self.is_port(self.light_pin):
-            self.port_on(self.light_pin)
-            return True
-        return False
-
-    def light_off(self):
-        if self.is_port(self.light_pin):
-            self.port_off(self.light_pin)
-            return True
-        return False
-
-    def is_port(self, bit):
-        return bool((1 << bit) & self._port_bits)
-
-    def port_on(self, bit):
-        self._port_bits = self._port_bits | (1 << bit)
-
-    def port_off(self, bit):
-        self._port_bits = ~((~self._port_bits) | (1 << bit))
-
-    def port_set(self, mask, values):
-        self._port_bits &= ~mask  # Unset mask.
-        self._port_bits |= values & mask  # Set masked bits.
-
-    #######################
     # UNIT CONVERSIONS
     #######################
 
@@ -767,87 +1025,49 @@ class GalvoController:
         return int(round(power * 0xFFF / 100.0))
 
     #######################
-    # HIGH LEVEL OPERATIONS
+    # LIST MANGEMENT
     #######################
 
-    def write_correction_file(self, filename):
-        if filename is None:
-            self.write_blank_correct_file()
-            return
-        try:
-            table = self._read_correction_file(filename)
-            self._write_correction_table(table)
-        except OSError:
-            self.write_blank_correct_file()
-            return
+    def _list_end(self):
+        with self._list_build_lock:
+            if self._active_list and self._active_index:
+                self.wait_ready()
+                while self.paused:
+                    time.sleep(0.3)
+                self.send(self._active_list, False)
+                self.set_end_of_list(0)
+                self._number_of_list_packets += 1
+                self._active_list = None
+                self._active_index = 0
+                if self._number_of_list_packets > 2 and not self._list_executing:
+                    self.execute_list()
+                    self._list_executing = True
 
-    @staticmethod
-    def get_scale_from_correction_file(filename):
-        with open(filename, "rb") as f:
-            label = f.read(0x16)
-            if label.decode("utf-16") == "LMC1COR_1.0":
-                unk = f.read(2)
-                return struct.unpack("63d", f.read(0x1F8))[43]
-            else:
-                unk = f.read(6)
-                return struct.unpack("d", f.read(8))[0]
+    def _list_new(self):
+        with self._list_build_lock:
+            self._active_list = copy(empty)
+            self._active_index = 0
 
-    def write_blank_correct_file(self):
-        self.write_cor_table(False)
+    def _list_write(self, command, v1=0, v2=0, v3=0, v4=0, v5=0):
+        if self._active_index >= 0xC00:
+            self._list_end()
+        with self._list_build_lock:
+            if self._active_list is None:
+                self._list_new()
+            index = self._active_index
+            self._active_list[index : index + 12] = struct.pack(
+                "<6H", int(command), int(v1), int(v2), int(v3), int(v4), int(v5)
+            )
+            self._active_index += 12
 
-    def _read_float_correction_file(self, f):
-        """
-        Read table for cor files marked: LMC1COR_1.0
-        @param f:
-        @return:
-        """
-        table = []
-        for j in range(65):
-            for k in range(65):
-                dx = int(round(struct.unpack("d", f.read(8))[0]))
-                dx = dx if dx >= 0 else -dx + 0x8000
-                dy = int(round(struct.unpack("d", f.read(8))[0]))
-                dy = dy if dy >= 0 else -dy + 0x8000
-                table.append([dx & 0xFFFF, dy & 0xFFFF])
-        return table
-
-    def _read_int_correction_file(self, f):
-        table = []
-        for j in range(65):
-            for k in range(65):
-                dx = int.from_bytes(f.read(4), "little", signed=True)
-                dx = dx if dx >= 0 else -dx + 0x8000
-                dy = int.from_bytes(f.read(4), "little", signed=True)
-                dy = dy if dy >= 0 else -dy + 0x8000
-                table.append([dx & 0xFFFF, dy & 0xFFFF])
-        return table
-
-    def _read_correction_file(self, filename):
-        """
-        Reads a standard .cor file and builds a table from that.
-
-        @param filename:
-        @return:
-        """
-        with open(filename, "rb") as f:
-            label = f.read(0x16)
-            if label.decode("utf-16") == "LMC1COR_1.0":
-                header = f.read(0x1FA)
-                return self._read_float_correction_file(f)
-            else:
-                header = f.read(0xE)
-                return self._read_int_correction_file(f)
-
-    def _write_correction_table(self, table):
-        assert len(table) == 65 * 65
-        self.write_cor_table(True)
-        first = True
-        for dx, dy in table:
-            self.write_cor_line(dx, dy, 0 if first else 1)
-            first = False
+    def _command(self, command, v1=0, v2=0, v3=0, v4=0, v5=0, read=True):
+        cmd = struct.pack(
+            "<6H", int(command), int(v1), int(v2), int(v3), int(v4), int(v5)
+        )
+        return self.send(cmd, read=read)
 
     #######################
-    # COMMAND LIST COMMAND
+    # RAW LIST COMMANDS
     #######################
 
     def list_jump(self, x, y, angle=0):
@@ -1120,7 +1340,7 @@ class GalvoController:
         self._list_write(listReadyMark)
 
     #######################
-    # COMMAND LIST SHORTCUTS
+    # RAW REALTIME COMMANDS
     #######################
 
     def disable_laser(self):
