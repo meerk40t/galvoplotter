@@ -8,6 +8,7 @@ to the hardware controller.
 import struct
 import threading
 import time
+from contextlib import contextmanager
 from copy import copy
 from .consts import *
 
@@ -402,6 +403,22 @@ class GalvoController:
     #######################
     # MODE SHIFTS
     #######################
+
+    @contextmanager
+    def marking(self):
+        self.marking_configuration()
+        try:
+            yield self
+        finally:
+            self.initial_configuration()
+
+    @contextmanager
+    def lighting(self):
+        self.lighting_configuration()
+        try:
+            yield self
+        finally:
+            self.initial_configuration()
 
     def initial_configuration(self):
         if self.laser_configuration == "initial":
