@@ -61,6 +61,8 @@ The controller has three general states. `init` when the controller exists and t
 ## Connection
 The connection component provides a low-level interface for raw command communication. The primary commands are `open()`, `close()`, `write()` and `read()`.
 
+In most cases, the connection will connect automatically when we need to send data.
+
 There are two primary connections, `usb_connection` which connects to the laser via usb (requires `pyusb`) and `mock_connection` which just pretends to connect to something but prints all the relevant debug data.
 
 The connection has 5 primary states.
@@ -76,7 +78,6 @@ Unlike other parts of the system, the spooler is optional, and the spooler does 
 
 The spooler serves to help facilitate sequential interactions, and free up the current thread for manipulating the laser. While lists are the primary method of sending a series of sequential commands to the lmc-controller, this does not cover all the potential workflows. Sometimes a series of small jobs is required, or an infinite lighting job followed by an infinite marking job (each requiring an explicit cancel to be issued from the realtime thread), and a lot of other potential workflows not otherwise explicitly stated.
  
-
 
 ## Job
 Jobs consist of a function to be called. This function should return `True` if the function was fully-processed. Otherwise, it will be executed repeatedly by the spooler until it returns `True` (which never happen). Between executions the spooler can be paused, aborted, or the job may be removed.
@@ -141,7 +142,7 @@ In many cases we want the current thread to block until some event has occurred.
 * `wait_ready()` waits until the device status is flagged `ready` and can accept additional packets
 * `wait_idle()` waits until the device status is not flagged as `busy` and is no longer doing work.
 
-Note: if you sent an infinite job. And you call `wait_for_spooler_job_sent()` or `wait_for_machine_idle()` you may end up livelocking the main thread, as those events will not occur. It may, however, terminate if the connection were broken.
+Note: if you sent an infinite job. And you call `wait_for_spooler_job_sent()` or `wait_for_machine_idle()` you may end up livelocking the main thread, as those states are unreachable. It may, however, terminate if the connection were broken.
 
 # Examples
 See https://github.com/meerk40t/galvoplotter/tree/main/examples for example scripts.
