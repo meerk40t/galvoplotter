@@ -5,6 +5,27 @@ from galvo import GalvoController, generate_job
 state = 0
 
 
+def infinite_lighting_job(c):
+    """
+    Never indicates job is finished.
+    :return:
+    """
+    c.lighting_configuration()
+    c.dark(0x8000, 0x8000)
+    c.light(0x2000, 0x2000)
+    return False
+
+def infinite_marking_job(c):
+    """
+    Never indicates job is finished.
+    :return:
+    """
+    c.marking_configuration()
+    c.goto(0x8000, 0x8000)
+    c.mark(0x2000, 0x2000)
+    return False
+
+
 class TestAPI(unittest.TestCase):
     def test_api_shutdown_job(self):
         """
@@ -14,43 +35,38 @@ class TestAPI(unittest.TestCase):
         :return:
         """
         controller = GalvoController(settings_file="test.json")
-
-        def my_job(c):
-            """
-            Never indicates job is finished.
-            :return:
-            """
-            c.lighting_configuration()
-            c.dark(0x8000, 0x8000)
-            c.light(0x2000, 0x2000)
-            return False
-
-        controller.submit(my_job)
+        controller.submit(infinite_lighting_job)
         time.sleep(2)
         controller.shutdown()
 
     def test_api_cancel_job(self):
         """
-        Test submission of a test job with shutdown.
+        Test submission of a test job with removal
 
         Test passes if the job quits out at around ~2 seconds.
         :return:
         """
         controller = GalvoController(settings_file="test.json")
-
-        def my_job(c):
-            """
-            Never indicates job is finished.
-            :return:
-            """
-            c.lighting_configuration()
-            c.dark(0x8000, 0x8000)
-            c.light(0x2000, 0x2000)
-            return False
-
-        controller.submit(my_job)
+        controller.submit(infinite_lighting_job)
         time.sleep(2)
-        controller.remove(my_job)
+        controller.remove(infinite_lighting_job)
+
+    def test_api_cancel_2job(self):
+        """
+        Test submission of two jobs. One an infinite lighting job, one an infinite marking job. Cancel sequentially.
+
+        Test passes if the job quits out at around ~4 seconds.
+        :return:
+        """
+        controller = GalvoController(settings_file="test.json")
+        controller.submit(infinite_lighting_job)
+        controller.submit(infinite_marking_job)
+        time.sleep(2)
+        self.assertIs(controller.current, infinite_lighting_job)
+        controller.remove(infinite_lighting_job)
+        time.sleep(2)
+        self.assertIs(controller.current, infinite_marking_job)
+        controller.remove(infinite_marking_job)
 
 
     def test_api_generator(self):
