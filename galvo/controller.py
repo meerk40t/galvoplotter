@@ -84,7 +84,7 @@ class GalvoController:
         self._spooler_lock = threading.Condition()
         self._queue = []
         self._current = None
-        self._thread = None
+        self._spooler_thread = None
 
         self._list_build_lock = threading.RLock()
         self.mock = mock
@@ -176,7 +176,7 @@ class GalvoController:
     def submit(self, job):
         with self._spooler_lock:
             self._queue.append(job)
-            self._spooler_lock.notify()
+            self._spooler_lock.notify_all()
         self.start()
 
     def remove(self, element):
@@ -185,7 +185,7 @@ class GalvoController:
                 e = self._queue[i]
                 if e is element:
                     del self._queue[i]
-            self._spooler_lock.notify()
+            self._spooler_lock.notify_all()
 
     def shutdown(self, *args, **kwargs):
         self._shutdown = True
@@ -198,16 +198,16 @@ class GalvoController:
             self._spooler_lock.notify_all()
             self._queue.clear()
             self.abort()
-        if self._thread:
-            self._thread.join()
+        if self._spooler_thread:
+            self._spooler_thread.join()
 
     def start(self):
         self._shutdown = False
-        if not self._thread:
-            self._thread = threading.Thread(target=self._run)
-            self._thread.start()
+        if not self._spooler_thread:
+            self._spooler_thread = threading.Thread(target=self._spooler_run)
+            self._spooler_thread.start()
 
-    def _run(self):
+    def _spooler_run(self):
         """
         Spooler run thread. While the controller is not shutdown we read the queue and execute whatever functions are
         located in the queue. The jobs return whether they were fully_executed. If they were they are removed
