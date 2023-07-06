@@ -200,6 +200,8 @@ class GalvoController:
             self.abort()
         if self._spooler_thread:
             self._spooler_thread.join()
+        if self.is_connected:
+            self.disconnect()
 
     def start(self):
         self._shutdown = False
