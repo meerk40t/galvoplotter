@@ -691,7 +691,7 @@ class GalvoController:
     # WAIT SPOOLER COMMANDS
     #######################
 
-    def spooler_wait_for_job_sent(self, job):
+    def wait_for_spooler_job_sent(self, job):
         assert (threading.current_thread() is not self._spooler_thread)
         with self._spooler_lock:
             if job not in self._queue:
