@@ -96,6 +96,9 @@ class GalvoController:
         self.galvos_per_mm = galvos_per_mm
 
         self.mark_speed = mark_speed
+        self.goto_speed = goto_speed
+        self.light_speed = light_speed
+        self.dark_speed = dark_speed
         self.travel_speed = travel_speed
         self.power = power
         self.frequency = frequency
@@ -148,10 +151,6 @@ class GalvoController:
         # Set attributes, these are actively sent to the controller already.
         self._last_x = x
         self._last_y = y
-        self._mark_speed = mark_speed
-        self._goto_speed = goto_speed
-        self._light_speed = light_speed
-        self._dark_speed = dark_speed
 
         self._ready = None
         self._speed = None
@@ -524,8 +523,8 @@ class GalvoController:
             long = self.delay_jump_long
         if short is None:
             short = self.delay_jump_short
-        if self._goto_speed is not None:
-            self.set_travel_speed(self._goto_speed)
+        if self.goto_speed is not None:
+            self.set_travel_speed(self.goto_speed)
         distance = int(abs(complex(x, y) - complex(self._last_x, self._last_y)))
         delay = long if distance_limit and distance > distance_limit else short
         if delay:
@@ -543,8 +542,8 @@ class GalvoController:
         if short is None:
             short = self.delay_jump_short
         self.light_on()
-        if self._light_speed is not None:
-            self.set_travel_speed(self._light_speed)
+        if self.light_speed is not None:
+            self.set_travel_speed(self.light_speed)
         distance = int(abs(complex(x, y) - complex(self._last_x, self._last_y)))
         delay = long if distance_limit and distance > distance_limit else short
         if delay:
@@ -562,8 +561,8 @@ class GalvoController:
         if short is None:
             short = self.delay_jump_short
         self.light_off()
-        if self._dark_speed is not None:
-            self.set_travel_speed(self._dark_speed)
+        if self.dark_speed is not None:
+            self.set_travel_speed(self.dark_speed)
         distance = int(abs(complex(x, y) - complex(self._last_x, self._last_y)))
         delay = long if distance_limit and distance > distance_limit else short
         if delay:
