@@ -746,6 +746,8 @@ class GalvoController:
     def resume(self):
         self.restart_list()
         self.paused = False
+        with self._spooler_lock:
+            self._spooler_lock.notify_all()
 
     def init_laser(self):
         self.usb_log("Initializing Laser")
