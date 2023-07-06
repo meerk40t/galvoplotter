@@ -12,22 +12,53 @@ Like most laser cutters, there are two classes of commands: realtime and sequent
 
 There are two primary threads, `main` and `spooler`. The spooler thread will execute a series of jobs in sequential order. Realtime control over this execution cannot occur within that thread, since many of these commands take time to execute and the thread for executing the job cannot correctly modulate the execution of that job, while writing the job. Some jobs may also be infinite meaning that the code used to create them will not natively terminate.
 
+For many applications it is sufficient to use the controller and connection. For example:
+
+
+```python
+    controller = GalvoController(settings_file="<my_settings>.json")
+    with controller.marking() as c:
+        c.goto(0x5000, 0x5000)
+        c.mark(0x5000, 0xA000)
+        c.mark(0xA000, 0xA000)
+        c.mark(0x5000, 0xA000)
+        c.mark(0x5000, 0x5000)
+    controller.wait_for_machine_idle()
+```
+
+Will quickly mark a square on the bed with default settings, without needing to use the spooler or writing a job.
+
+However, sometimes you may need to cancel a job while it's running, or write an infinite job. For example:
+
+```python
+        controller = GalvoController(settings_file="<my_settings>.json")
+
+        def my_job(c):
+            c.lighting_configuration()
+            c.dark(0x8000, 0x8000)
+            c.light(0x2000, 0x2000)
+            return False
+
+        controller.submit(my_job)
+        time.sleep(2)
+        controller.shutdown()
+```
+
+This creates a job `my_job(c)` and submits it to the spooler. This would not complete (the job does not end). It would simply draw the same light-line between `0x8000,0x8000` and `0x2000, 0x2000` forever. However, after sleeping the current thread (`main`) for `2` seconds we call shutdown which should abort the job in progress.
 
 # Components
 There are 4 primary components used with galvoplotter: controller, connection, spooler, and job.
 
 ## Controller
-The controller deals primarily with interactions between the lmc-controller board and the software. The controller contains all the realtime and sequential commands that can be issued to the controller board. This is intended to facilitate the communications between the user of this library and the controller board, serving to translate the internally used command code into function calls. Sequential list-based commands are merely added to an active list until that list is closed and sent. When the number of commands exceeds 256 it will automatically send that part of the list.
+The controller serves as the bridge between your software and the lmc-controller board. It facilitates communication by translating internally used command codes into function calls. The controller houses all the realtime and sequential commands available for interaction. Sequential commands can be easily added to an active list until they are closed and sent to the laser. 
 
-### States
 The controller has three general states. First is `init` the controller exists and things can be done with it. The second is `shutting down` and the last is `shutdown`. When `shutdown()` is called all components should go ahead and stop what they are doing as quick as they can. This includes aborting any operations occurring in the laser. If the laser should finish, rather than shutdown one of the `wait` commands should be called. 
 
 ## Connection
-The connection is the lowest level interface. It serves as the primary method of communication for raw commands. The primary commands are `open()`, `close()`, `write()` and `read()`. How those interactions work is abstracted from the rest of the system.
+The connection component provides a low-level interface for raw command communication. The primary commands are `open()`, `close()`, `write()` and `read()`.
 
 There are two primary connections, `usb_connection` which connects to the laser via usb (requires `pyusb`) and `mock_connection` which just pretends to connect to something but prints all the relevant debug data.
 
-### States
 The connection has 5 primary states.
 
 * `init`: Connection is not opened. We have never connected.
@@ -39,8 +70,6 @@ The connection has 5 primary states.
 ## Spooler
 The spooler serves to help facilitate sequential low-level interactions. While the primary method of sending a series of sequential commands for the lmc_controller are lists, this does not cover all the potential workflows. Sometimes a series of small jobs is required, or an infinite lighting job followed by an infinite marking job (each requiring an explicit cancel to be issued from the realtime thread).
 
-
-### States
 Unlike other parts of the system, the spooler is optional, and the spooler does not start automatically. It starts only when jobs are submitted. It continues until the queue has completed. Pausing will block the spooler from starting the next job, or re-entering the current job.  
 
 
