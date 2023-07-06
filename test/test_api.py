@@ -153,6 +153,18 @@ class TestAPI(unittest.TestCase):
         c.wait_for_machine_idle()
         print("test_mark_square: final line or test fail.")
 
+    def test_fire_center(self):
+        """
+        Test for firing laser 100ms in center of lens.
+        :return:
+        """
+        c = GalvoController(settings_file=__settings__)
+        with c.marking() as c:
+            c.set_frequency(25.4)  # Set frequency to 25.4kHz
+            c.goto(0x8000, 0x8000)
+            c.dwell(100)
+        c.wait_for_machine_idle()
+
     def test_grid_stops(self):
         """
         Test for a grid of lit points.
