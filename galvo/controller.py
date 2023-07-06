@@ -10,11 +10,10 @@ import threading
 import time
 from contextlib import contextmanager
 from copy import copy
-from .consts import *
 
+from .consts import *
 from .mock_connection import MockConnection
 from .usb_connection import USBConnection
-
 
 BUSY = 0x04
 READY = 0x20
@@ -166,7 +165,8 @@ class GalvoController:
         self._delay_end = None
         if settings_file is not None:
             import json
-            with open(settings_file, 'r') as fp:
+
+            with open(settings_file, "r") as fp:
                 self.__dict__.update(json.load(fp))
 
     #######################
@@ -682,7 +682,7 @@ class GalvoController:
     #######################
 
     def wait_for_spooler_job_sent(self, job):
-        assert (threading.current_thread() is not self._spooler_thread)
+        assert threading.current_thread() is not self._spooler_thread
         with self._spooler_lock:
             if job not in self._queue:
                 # Waiting for job that does not exist.
@@ -694,7 +694,7 @@ class GalvoController:
         Block the current thread until system is idle
         :return:
         """
-        assert(threading.current_thread() is not self._spooler_thread)
+        assert threading.current_thread() is not self._spooler_thread
         self.wait_for_spooler_send()
         self.wait_finished()
 
@@ -706,7 +706,7 @@ class GalvoController:
 
         :return:
         """
-        assert (threading.current_thread() is not self._spooler_thread)
+        assert threading.current_thread() is not self._spooler_thread
         while self._queue:
             with self._spooler_lock:
                 self._spooler_lock.wait()

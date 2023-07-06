@@ -8,8 +8,7 @@ any hardware.
 import random
 import struct
 
-from .consts import list_command_lookup
-from .consts import single_command_lookup
+from .consts import list_command_lookup, single_command_lookup
 
 
 def _(data):

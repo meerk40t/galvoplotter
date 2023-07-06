@@ -1,5 +1,3 @@
-
-
 listJumpTo = 0x8001
 listEndOfList = 0x8002
 listLaserOnPoint = 0x8003

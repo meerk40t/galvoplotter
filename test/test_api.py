@@ -1,14 +1,14 @@
 import os
 import time
 import unittest
+
 from galvo import GalvoController, generate_job
 
 state = 0
 
-__location__ = os.path.realpath(
-    os.path.join(os.getcwd(), os.path.dirname(__file__)))
+__location__ = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__)))
 
-__settings__ = os.path.join(__location__, 'test.json')
+__settings__ = os.path.join(__location__, "test.json")
 
 
 def infinite_lighting_job(c):

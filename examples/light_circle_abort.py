@@ -4,7 +4,9 @@ Draws a circle in light with a radius that is updated with + and - key presses.
 """
 
 import math
+
 from pynput import keyboard
+
 from galvo.controller import GalvoController
 
 controller = GalvoController("default.json")

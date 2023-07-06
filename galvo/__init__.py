@@ -1,5 +1,5 @@
-from .controller import GalvoController
 from .consts import *
+from .controller import GalvoController
 
 
 def generate_job(generator):
@@ -25,4 +25,3 @@ def generate_job(generator):
             return True
 
     return job
-
