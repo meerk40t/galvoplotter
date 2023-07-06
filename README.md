@@ -102,7 +102,7 @@ There are context managers for the `controller.marking()` and `controller.lighti
         c.dwell(100)
     controller.wait_for_machine_idle()
 ```
-This would, for example, mark draw a square. During the use of the `marking()` context, our commands are executed in the `controller.marking_configuration()` it's restored to the `initial_configuration` on exit which will execute any list commands in the buffer.
+This would, for example, fire the laser for 100ms in the center of the area. During the use of the `marking()` context, our commands are executed in the `controller.marking_configuration()` it's restored to the `initial_configuration` on exit which will execute any list commands in the buffer.
 
 
 # Midlevel Commands
