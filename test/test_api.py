@@ -5,7 +5,6 @@ from galvo import GalvoController, generate_job
 state = 0
 
 
-
 def infinite_lighting_job(c):
     """
     Never indicates job is finished.
@@ -89,7 +88,6 @@ class TestAPI(unittest.TestCase):
         print("Resumed")
         time.sleep(2)
         controller.remove(infinite_lighting_job)
-
 
     def test_api_generator(self):
         """
