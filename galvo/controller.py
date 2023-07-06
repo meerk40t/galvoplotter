@@ -218,6 +218,9 @@ class GalvoController:
         """
         while not self._shutdown:
             with self._spooler_lock:
+                if self.paused:
+                    self._spooler_lock.wait()
+                    continue
                 try:
                     program = self._queue[0]
                 except IndexError:
