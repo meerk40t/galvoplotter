@@ -8,7 +8,6 @@ to the hardware controller.
 import struct
 import threading
 import time
-from contextlib import contextmanager
 from copy import copy
 from .consts import *
 
@@ -254,7 +253,7 @@ class GalvoController:
             if self._shutdown:
                 return
             try:
-                fully_executed = program()
+                fully_executed = program(self)
             except ConnectionAbortedError:
                 # Driver could no longer connect to where it was told to send the data.
                 return
