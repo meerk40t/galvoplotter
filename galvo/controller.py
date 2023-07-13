@@ -641,6 +641,12 @@ class GalvoController:
         else:
             self.write_port()
 
+    def rotary(self, position, min_speed=100, max_speed=5000, origin_param=100, **kwgs):
+        self.set_axis_motion_param(min_speed & 0xFFFF, max_speed & 0xFFFF)
+        self.set_axis_origin_param(origin_param)
+        self.move_axis_to(position & 0xFFFF)
+        self.wait_axis()
+
     def get_last_xy(self):
         return self._last_x, self._last_y
 
