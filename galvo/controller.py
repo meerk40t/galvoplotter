@@ -17,6 +17,7 @@ from .usb_connection import USBConnection
 
 BUSY = 0x04
 READY = 0x20
+AXIS = 0x40
 
 nop = [0x02, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 empty = bytearray(nop * 0x100)
@@ -655,12 +656,22 @@ class GalvoController:
         status = self.status()
         return bool(status & READY)
 
+    def is_axis(self):
+        status = self.status()
+        return bool(status & AXIS)
+
     def is_ready_and_not_busy(self):
         status = self.status()
         return bool(status & READY) and not bool(status & BUSY)
 
     def wait_finished(self):
         while not self.is_ready_and_not_busy():
+            time.sleep(0.01)
+            if not self._sending:
+                return
+
+    def wait_axis(self):
+        while self.is_axis():
             time.sleep(0.01)
             if not self._sending:
                 return
