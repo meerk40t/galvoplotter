@@ -2,7 +2,7 @@
 Galvo Controller
 
 The balor controller takes low level lmc galvo commands and converts them into lists and shorts commands to send
-to the hardware controller.
+to the hardware controller as both spooled and realtime commands.
 """
 
 import struct
@@ -30,7 +30,7 @@ class GalvoController:
 
     This should serve as a next generation command sequencer written from scratch for galvo lasers. The goal is to
     provide all the given commands in a coherent queue structure which provides correct sequences between list and
-    single commands.
+    single commands. As well as some higher level helper commands tasked with simplifying scripts and workflows.
     """
 
     def __init__(
