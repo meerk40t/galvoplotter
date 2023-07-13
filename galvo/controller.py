@@ -2,7 +2,7 @@
 Galvo Controller
 
 The balor controller takes low level lmc galvo commands and converts them into lists and shorts commands to send
-to the hardware controller.
+to the hardware controller as both spooled and realtime commands.
 """
 
 import struct
@@ -17,6 +17,7 @@ from .usb_connection import USBConnection
 
 BUSY = 0x04
 READY = 0x20
+AXIS = 0x40
 
 nop = [0x02, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 empty = bytearray(nop * 0x100)
@@ -29,7 +30,7 @@ class GalvoController:
 
     This should serve as a next generation command sequencer written from scratch for galvo lasers. The goal is to
     provide all the given commands in a coherent queue structure which provides correct sequences between list and
-    single commands.
+    single commands. As well as some higher level helper commands tasked with simplifying scripts and workflows.
     """
 
     def __init__(
@@ -640,6 +641,12 @@ class GalvoController:
         else:
             self.write_port()
 
+    def rotary(self, position, min_speed=100, max_speed=5000, origin_param=100, **kwgs):
+        self.set_axis_motion_param(min_speed & 0xFFFF, max_speed & 0xFFFF)
+        self.set_axis_origin_param(origin_param)
+        self.move_axis_to(position & 0xFFFF)
+        self.wait_axis()
+
     def get_last_xy(self):
         return self._last_x, self._last_y
 
@@ -655,12 +662,22 @@ class GalvoController:
         status = self.status()
         return bool(status & READY)
 
+    def is_axis(self):
+        status = self.status()
+        return bool(status & AXIS)
+
     def is_ready_and_not_busy(self):
         status = self.status()
         return bool(status & READY) and not bool(status & BUSY)
 
     def wait_finished(self):
         while not self.is_ready_and_not_busy():
+            time.sleep(0.01)
+            if not self._sending:
+                return
+
+    def wait_axis(self):
+        while self.is_axis():
             time.sleep(0.01)
             if not self._sending:
                 return
@@ -1440,17 +1457,17 @@ class GalvoController:
     def read_port(self):
         return self._command(ReadPort)
 
-    def set_axis_motion_param(self, param):
-        return self._command(SetAxisMotionParam, param)
+    def set_axis_motion_param(self, p0=0, p1=0, p2=0, p3=0):
+        return self._command(SetAxisMotionParam, p0, p1, p2, p3)
 
-    def set_axis_origin_param(self, param):
-        return self._command(SetAxisOriginParam, param)
+    def set_axis_origin_param(self, p0=0, p1=0, p2=0, p3=0):
+        return self._command(SetAxisOriginParam, p0, p1, p2, p3)
 
-    def axis_go_origin(self):
-        return self._command(AxisGoOrigin)
+    def axis_go_origin(self, p0=0, p1=0):
+        return self._command(AxisGoOrigin, p0, p1)
 
-    def move_axis_to(self, a):
-        return self._command(MoveAxisTo)
+    def move_axis_to(self, p0, p1=0, p2=0, p3=0):
+        return self._command(MoveAxisTo, p0, p1, p2, p3)
 
     def get_axis_pos(self):
         return self._command(GetAxisPos)

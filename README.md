@@ -154,5 +154,5 @@ See https://github.com/meerk40t/galvoplotter/tree/main/examples for example scri
 # Thanks
 * Bryce Schroeder - Did the initial work for reverse engineering the format for the laser.
   * See: https://gitlab.com/bryce15/balor for his project.
-* inpain / tiger12506 - Did considerable with galvo lasers to faciliate the reverse engineering.
+* inpain / tiger12506 - Did considerable debugging with galvo lasers to facilitate the reverse engineering.
 * Sandor Konya - Introductions, advice and support
