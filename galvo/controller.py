@@ -1479,8 +1479,8 @@ class GalvoController:
     def move_axis_to(self, p0, p1=0, p2=0, p3=0):
         return self._command(MoveAxisTo, p0, p1, p2, p3)
 
-    def get_axis_pos(self):
-        return self._command(GetAxisPos)
+    def get_axis_pos(self, index=0):
+        return self._command(GetAxisPos, index)
 
     def get_fly_wait_count(self):
         return self._command(GetFlyWaitCount)
