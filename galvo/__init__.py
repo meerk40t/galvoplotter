@@ -1,6 +1,8 @@
 from .consts import *
 from .controller import GalvoController
 
+VERSION = "0.1.2"
+
 
 def generate_job(generator):
     v = generator()
