@@ -650,6 +650,13 @@ class GalvoController:
         self.move_axis_to(p0, p1)
         self.wait_axis()
 
+    def rotary_position(self):
+        pos = self.get_axis_pos(0)
+        position = pos[1] << 16 & pos[2]
+        if position >= 0x80000000:
+            return position - 0x80000000
+        return position
+
     def get_last_xy(self):
         return self._last_x, self._last_y
 
