@@ -641,11 +641,21 @@ class GalvoController:
         else:
             self.write_port()
 
-    def rotary(self, position, min_speed=100, max_speed=5000, origin_param=100, **kwgs):
+    def rotary(self, position, min_speed=100, max_speed=5000, acc_time=100, **kwgs):
         self.set_axis_motion_param(min_speed & 0xFFFF, max_speed & 0xFFFF)
-        self.set_axis_origin_param(origin_param)
-        self.move_axis_to(position & 0xFFFF)
+        self.set_axis_origin_param(acc_time)
+        pos = position if position >= 0 else -position + 0x80000000
+        p1 = (pos >> 16) & 0xFFFF
+        p0 = (pos & 0xFFFF)
+        self.move_axis_to(p0, p1)
         self.wait_axis()
+
+    def rotary_position(self):
+        pos = self.get_axis_pos(0)
+        position = pos[1] << 16 & pos[2]
+        if position >= 0x80000000:
+            return position - 0x80000000
+        return position
 
     def get_last_xy(self):
         return self._last_x, self._last_y
@@ -1469,8 +1479,8 @@ class GalvoController:
     def move_axis_to(self, p0, p1=0, p2=0, p3=0):
         return self._command(MoveAxisTo, p0, p1, p2, p3)
 
-    def get_axis_pos(self):
-        return self._command(GetAxisPos)
+    def get_axis_pos(self, index=0):
+        return self._command(GetAxisPos, index)
 
     def get_fly_wait_count(self):
         return self._command(GetFlyWaitCount)
