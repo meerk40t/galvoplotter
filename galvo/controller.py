@@ -133,6 +133,8 @@ class GalvoController:
         self.delay_jump_short = delay_jump_short
         self.delay_jump_long = delay_jump_long
 
+        self.source = "fiber"
+
         # Running attributes
         self._usb_log = usb_log
         self._is_connecting_to_laser = False
