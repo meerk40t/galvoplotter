@@ -1292,13 +1292,15 @@ class GalvoController:
         """
         self._list_write(listFlyDelay, abs(delay), 0x0000 if delay > 0 else 0x8000)
 
-    def list_set_co2_fpk(self):
+    def list_set_co2_fpk(self, fpk1, fpk2=None):
         """
         Set the CO2 Laser, First Pulse Killer.
 
         @return:
         """
-        self._list_write(listSetCo2FPK)
+        if fpk2 is None:
+            fpk2 = fpk1
+        self._list_write(listSetCo2FPK, fpk1, fpk2)
 
     def list_fly_wait_input(self):
         """
