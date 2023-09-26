@@ -1063,7 +1063,7 @@ class GalvoController:
         galvos_per_mm = abs(self.galvos_per_mm)
         return int(speed * galvos_per_mm / 1000.0)
 
-    def _convert_frequency(self, frequency_khz):
+    def _convert_frequency(self, frequency_khz, base=20000.0):
         """
         Converts frequency to period.
 
@@ -1072,7 +1072,7 @@ class GalvoController:
         @param frequency_khz: Frequency to convert
         @return:
         """
-        return int(round(20000.0 / frequency_khz)) & 0xFFFF
+        return int(round(base / frequency_khz)) & 0xFFFF
 
     def _convert_power(self, power):
         """
