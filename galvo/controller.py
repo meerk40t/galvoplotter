@@ -1034,12 +1034,14 @@ class GalvoController:
             return
         # TODO: Implement
 
-
     def set_frequency(self, frequency):
         if self._frequency == frequency or frequency is None:
             return
         self._frequency = frequency
-        self.list_qswitch_period(self._convert_frequency(frequency))
+        if self.source == "fiber":
+            self.list_qswitch_period(self._convert_frequency(frequency, base=20000.0))
+        elif self.source == "co2":
+            self.list_mark_frequency(self._convert_frequency(frequency, base=10000.0))
 
     def set_pulse_width(self, pulse_width):
         if self._pulse_width == pulse_width or pulse_width is None:
