@@ -101,6 +101,7 @@ class GalvoController:
         self.dark_speed = dark_speed
         self.travel_speed = travel_speed
         self.power = power
+        self.fpk = fpk
         self.frequency = frequency
 
         self.cor_file = cor_file
@@ -158,6 +159,7 @@ class GalvoController:
         self._speed = None
         self._travel_speed = None
         self._frequency = None
+        self._fpk = None
         self._power = None
         self._pulse_width = None
 
