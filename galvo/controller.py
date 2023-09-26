@@ -932,6 +932,7 @@ class GalvoController:
         mark_speed=None,
         travel_speed=None,
         power=None,
+        fpk=None,
         frequency=None,
         pulse_width=None,
         delay_on=None,
@@ -944,6 +945,8 @@ class GalvoController:
             travel_speed = self.travel_speed
         if power is None:
             power = self.power
+        if fpk is None:
+            fpk = self.fpk
         if frequency is None:
             frequency = self.frequency
         if pulse_width is None:
@@ -958,6 +961,8 @@ class GalvoController:
 
         self.set_travel_speed(travel_speed)
         self.set_power(power)
+        if self.source == "co2":
+            self.set_fpk()
         self.set_frequency(frequency)
         self.set_mark_speed(mark_speed)
         self.set_delay_on(delay_on)
@@ -1013,6 +1018,18 @@ class GalvoController:
             return
         self._power = power
         self.list_mark_current(self._convert_power(power))
+
+    def set_fpk(self, fpk):
+        """
+        Set First Pulse Killer
+
+        @param fpk: first_pulse_killer value
+        @return:
+        """
+        if self._fpk == fpk or fpk is None:
+            return
+        # TODO: Implement
+
 
     def set_frequency(self, frequency):
         if self._frequency == frequency or frequency is None:
