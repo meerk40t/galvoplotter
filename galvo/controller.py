@@ -1185,14 +1185,12 @@ class GalvoController:
 
     def list_mark_frequency(self, frequency):
         """
-        This command is used in some machines but, it's not clear given the amount of reverse engineering how those
-        values are set. This is done for laser_type = 4.
+        This command is used in CO2 source lasers. laser_type = 4
 
-        @param frequency:
+        @param frequency: frequency to set.
         @return:
         """
-        # listMarkFreq
-        raise NotImplementedError
+        self._list_write(listMarkFreq, frequency)
 
     def list_mark_power_ratio(self, power_ratio):
         """
