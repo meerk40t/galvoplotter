@@ -427,7 +427,8 @@ class GalvoController:
         self._list_executing = False
         self._number_of_list_packets = 0
         self.wait_idle()
-        self.set_fiber_mo(0)
+        if self.source == "fiber":
+            self.set_fiber_mo(0)
         self.port_off(bit=self.laser_pin)
         self.write_port()
         marktime = self.get_mark_time()
@@ -441,13 +442,15 @@ class GalvoController:
             self.laser_configuration = "marking"
             self.port_on(bit=self.laser_pin)
             self.light_off()
-            self.set_fiber_mo(1)
+            if self.source == "fiber":
+                self.set_fiber_mo(1)
         else:
             self.laser_configuration = "marking"
             self.reset_list()
             self.port_on(bit=self.laser_pin)
             self.write_port()
-            self.set_fiber_mo(1)
+            if self.source == "fiber":
+                self.set_fiber_mo(1)
             self._ready = None
             self._speed = None
             self._travel_speed = None
@@ -461,7 +464,7 @@ class GalvoController:
             self._delay_poly = None
             self._delay_end = None
             self.list_ready()
-            if self.delay_open_mo:
+            if self.delay_open_mo and self.source == "fiber":
                 self.list_delay_time(int(self.delay_open_mo * 100))
             self.list_write_port()
         self.set()
@@ -470,7 +473,8 @@ class GalvoController:
         if self.laser_configuration == "lighting":
             return
         if self.laser_configuration == "marking":
-            self.set_fiber_mo(0)
+            if self.source == "fiber":
+                self.set_fiber_mo(0)
             self.port_off(self.laser_pin)
             self.port_on(self.light_pin)
             self.write_port()
@@ -743,7 +747,8 @@ class GalvoController:
     def abort(self, dummy_packet=True):
         with self._list_build_lock:
             self.stop_execute()
-            self.set_fiber_mo(0)
+            if self.source == "fiber":
+                self.set_fiber_mo(0)
             self.reset_list()
             if dummy_packet:
                 self._list_new()
@@ -753,7 +758,8 @@ class GalvoController:
                     self.execute_list()
             self._list_executing = False
             self._number_of_list_packets = 0
-            self.set_fiber_mo(0)
+            if self.source == "fiber":
+                self.set_fiber_mo(0)
             self.port_off(self.laser_pin)
             self.write_port()
             self.laser_configuration = "initial"
@@ -797,8 +803,9 @@ class GalvoController:
         self.usb_log("Set PWM Half-Period")
         self.set_pwm_pulse_width(self.pwm_pulse_width)
         self.usb_log("Set PWM pulse width")
-        self.set_fiber_mo(0)  # Close
-        self.usb_log("Set Fiber Mo (Closed)")
+        if self.source == "fiber":
+            self.set_fiber_mo(0)  # Close
+            self.usb_log("Set Fiber Mo (Closed)")
         self.set_pfk_param_2(
             self.fpk_max_voltage, self.fpk_min_voltage, self.fpk_t1, self.fpk_t2
         )
