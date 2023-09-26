@@ -59,6 +59,7 @@ class GalvoController:
         delay_mode=1,
         laser_mode=1,
         control_mode=0,
+        fpk=None,
         fpk_max_voltage=0xFFB,
         fpk_min_voltage=1,
         fpk_t1=409,
@@ -959,7 +960,8 @@ class GalvoController:
             delay_off = self.delay_laser_off
         if delay_polygon is None:
             delay_polygon = self.delay_polygon
-        self.set_pulse_width(pulse_width)
+        if self.source == "fiber":
+            self.set_pulse_width(pulse_width)
 
         self.set_travel_speed(travel_speed)
         self.set_power(power)
@@ -1199,7 +1201,6 @@ class GalvoController:
         @param power_ratio:
         @return:
         """
-        # listMarkPowerRatio
         self._list_write(listMarkPowerRatio, power_ratio)
 
     def list_mark_speed(self, speed):
