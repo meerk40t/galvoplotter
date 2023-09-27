@@ -944,22 +944,41 @@ class GalvoController:
     ):
         if mark_speed is None:
             mark_speed = self.mark_speed
+        else:
+            self.mark_speed = mark_speed
         if travel_speed is None:
             travel_speed = self.travel_speed
+        else:
+            self.travel_speed = travel_speed
         if power is None:
             power = self.power
+        else:
+            self.power = power
         if fpk is None:
             fpk = self.fpk
+        else:
+            self.fpk = fpk
         if frequency is None:
             frequency = self.frequency
+        else:
+            self.frequency = frequency
         if pulse_width is None:
             pulse_width = self.pulse_width
+        else:
+            self.pulse_width = pulse_width
         if delay_on is None:
             delay_on = self.delay_laser_on
+        else:
+            self.delay_laser_on = delay_on
         if delay_off is None:
             delay_off = self.delay_laser_off
+        else:
+            self.delay_laser_off = delay_off
         if delay_polygon is None:
             delay_polygon = self.delay_polygon
+        else:
+            self.delay_polygon = self.delay_polygon
+
         self.set_travel_speed(travel_speed)
         if self.source == "co2":
             self.set_frequency(frequency)
