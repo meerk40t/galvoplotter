@@ -11,6 +11,9 @@ galvo plotter can be installed with `pip`
 # Goals
 The primary goal of this project is to make for easy interactions with the lmc-controller board. Interactions that can be low-level enough to exactly allow the user to send exactly the data they want, or high level enough to allow the user to quickly implement their code and send it to the laser without needing to know anything about how that was done. 
 
+# Support
+Currently, BJJCZ `fiber` and `co2` lasers are supported. By default, `fiber` would be assumed but you can specify `source` to be `co2` or `fiber` so that some commands like `controller.set(power=25, frequency=20)` will work with the device specific aspects.  
+
 # Realtime/Sequential
 Like most laser cutters, there are two classes of commands: realtime and sequential. The realtime commands usually perform actions like `status`, `jogging`, `pause`, `resume`, `abort`. This differs from controller to controller but this same general distinction holds true. There are two different classes of commands: ones that should be executed sequentially in order and the ones that should be executed immediately.
 
