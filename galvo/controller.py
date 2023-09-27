@@ -960,14 +960,16 @@ class GalvoController:
             delay_off = self.delay_laser_off
         if delay_polygon is None:
             delay_polygon = self.delay_polygon
-        if self.source == "fiber":
-            self.set_pulse_width(pulse_width)
-
         self.set_travel_speed(travel_speed)
-        self.set_power(power)
         if self.source == "co2":
-            self.set_fpk()
-        self.set_frequency(frequency)
+            self.set_frequency(frequency)
+            self.set_fpk(fpk)
+            self.set_power(power)
+        elif self.source == "fiber":
+            self.set_pulse_width(pulse_width)
+            self.set_power(power)
+            self.set_fpk(fpk)
+            self.set_frequency(frequency)
         self.set_mark_speed(mark_speed)
         self.set_delay_on(delay_on)
         self.set_delay_off(delay_off)
@@ -1013,7 +1015,7 @@ class GalvoController:
 
     def set_power(self, power):
         """
-        Accepts power in percent, automatically converts to power_ratio
+        Accepts power in percent, automatically converts to power command.
 
         @param power:
         @return:
@@ -1021,18 +1023,27 @@ class GalvoController:
         if self._power == power or power is None:
             return
         self._power = power
-        self.list_mark_current(self._convert_power(power))
+        if self.source == "co2":
+            power_ratio = int(round(200 * power / self._frequency))
+            self.list_mark_power_ratio(power_ratio)
+        if self.source == "fiber":
+            self.list_mark_current(self._convert_power(power))
 
     def set_fpk(self, fpk):
         """
         Set First Pulse Killer
 
-        @param fpk: first_pulse_killer value
+        @param fpk: first_pulse_killer value in percent.
         @return:
         """
+        if self.source != "co2":
+            # FPK only used for CO2 source.
+            return
         if self._fpk == fpk or fpk is None:
             return
-        # TODO: Implement
+        self._fpk = fpk
+        first_pulse_killer = int(round(2000.0 / self._frequency))
+        self.list_set_co2_fpk(first_pulse_killer)
 
     def set_frequency(self, frequency):
         if self._frequency == frequency or frequency is None:
