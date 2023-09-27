@@ -59,6 +59,7 @@ class GalvoController:
         delay_mode=1,
         laser_mode=1,
         control_mode=0,
+        fpk=None,
         fpk_max_voltage=0xFFB,
         fpk_min_voltage=1,
         fpk_t1=409,
@@ -101,6 +102,7 @@ class GalvoController:
         self.dark_speed = dark_speed
         self.travel_speed = travel_speed
         self.power = power
+        self.fpk = fpk
         self.frequency = frequency
 
         self.cor_file = cor_file
@@ -133,6 +135,8 @@ class GalvoController:
         self.delay_jump_short = delay_jump_short
         self.delay_jump_long = delay_jump_long
 
+        self.source = "fiber"
+
         # Running attributes
         self._usb_log = usb_log
         self._is_connecting_to_laser = False
@@ -156,6 +160,7 @@ class GalvoController:
         self._speed = None
         self._travel_speed = None
         self._frequency = None
+        self._fpk = None
         self._power = None
         self._pulse_width = None
 
@@ -425,7 +430,8 @@ class GalvoController:
         self._list_executing = False
         self._number_of_list_packets = 0
         self.wait_idle()
-        self.set_fiber_mo(0)
+        if self.source == "fiber":
+            self.set_fiber_mo(0)
         self.port_off(bit=self.laser_pin)
         self.write_port()
         marktime = self.get_mark_time()
@@ -439,13 +445,15 @@ class GalvoController:
             self.laser_configuration = "marking"
             self.port_on(bit=self.laser_pin)
             self.light_off()
-            self.set_fiber_mo(1)
+            if self.source == "fiber":
+                self.set_fiber_mo(1)
         else:
             self.laser_configuration = "marking"
             self.reset_list()
             self.port_on(bit=self.laser_pin)
             self.write_port()
-            self.set_fiber_mo(1)
+            if self.source == "fiber":
+                self.set_fiber_mo(1)
             self._ready = None
             self._speed = None
             self._travel_speed = None
@@ -459,7 +467,7 @@ class GalvoController:
             self._delay_poly = None
             self._delay_end = None
             self.list_ready()
-            if self.delay_open_mo:
+            if self.delay_open_mo and self.source == "fiber":
                 self.list_delay_time(int(self.delay_open_mo * 100))
             self.list_write_port()
         self.set()
@@ -468,7 +476,8 @@ class GalvoController:
         if self.laser_configuration == "lighting":
             return
         if self.laser_configuration == "marking":
-            self.set_fiber_mo(0)
+            if self.source == "fiber":
+                self.set_fiber_mo(0)
             self.port_off(self.laser_pin)
             self.port_on(self.light_pin)
             self.write_port()
@@ -741,7 +750,8 @@ class GalvoController:
     def abort(self, dummy_packet=True):
         with self._list_build_lock:
             self.stop_execute()
-            self.set_fiber_mo(0)
+            if self.source == "fiber":
+                self.set_fiber_mo(0)
             self.reset_list()
             if dummy_packet:
                 self._list_new()
@@ -751,7 +761,8 @@ class GalvoController:
                     self.execute_list()
             self._list_executing = False
             self._number_of_list_packets = 0
-            self.set_fiber_mo(0)
+            if self.source == "fiber":
+                self.set_fiber_mo(0)
             self.port_off(self.laser_pin)
             self.write_port()
             self.laser_configuration = "initial"
@@ -795,8 +806,9 @@ class GalvoController:
         self.usb_log("Set PWM Half-Period")
         self.set_pwm_pulse_width(self.pwm_pulse_width)
         self.usb_log("Set PWM pulse width")
-        self.set_fiber_mo(0)  # Close
-        self.usb_log("Set Fiber Mo (Closed)")
+        if self.source == "fiber":
+            self.set_fiber_mo(0)  # Close
+            self.usb_log("Set Fiber Mo (Closed)")
         self.set_pfk_param_2(
             self.fpk_max_voltage, self.fpk_min_voltage, self.fpk_t1, self.fpk_t2
         )
@@ -923,6 +935,7 @@ class GalvoController:
         mark_speed=None,
         travel_speed=None,
         power=None,
+        fpk=None,
         frequency=None,
         pulse_width=None,
         delay_on=None,
@@ -931,25 +944,51 @@ class GalvoController:
     ):
         if mark_speed is None:
             mark_speed = self.mark_speed
+        else:
+            self.mark_speed = mark_speed
         if travel_speed is None:
             travel_speed = self.travel_speed
+        else:
+            self.travel_speed = travel_speed
         if power is None:
             power = self.power
+        else:
+            self.power = power
+        if fpk is None:
+            fpk = self.fpk
+        else:
+            self.fpk = fpk
         if frequency is None:
             frequency = self.frequency
+        else:
+            self.frequency = frequency
         if pulse_width is None:
             pulse_width = self.pulse_width
+        else:
+            self.pulse_width = pulse_width
         if delay_on is None:
             delay_on = self.delay_laser_on
+        else:
+            self.delay_laser_on = delay_on
         if delay_off is None:
             delay_off = self.delay_laser_off
+        else:
+            self.delay_laser_off = delay_off
         if delay_polygon is None:
             delay_polygon = self.delay_polygon
-        self.set_pulse_width(pulse_width)
+        else:
+            self.delay_polygon = self.delay_polygon
 
         self.set_travel_speed(travel_speed)
-        self.set_power(power)
-        self.set_frequency(frequency)
+        if self.source == "co2":
+            self.set_frequency(frequency)
+            self.set_fpk(fpk)
+            self.set_power(power)
+        elif self.source == "fiber":
+            self.set_pulse_width(pulse_width)
+            self.set_power(power)
+            self.set_fpk(fpk)
+            self.set_frequency(frequency)
         self.set_mark_speed(mark_speed)
         self.set_delay_on(delay_on)
         self.set_delay_off(delay_off)
@@ -995,7 +1034,7 @@ class GalvoController:
 
     def set_power(self, power):
         """
-        Accepts power in percent, automatically converts to power_ratio
+        Accepts power in percent, automatically converts to power command.
 
         @param power:
         @return:
@@ -1003,13 +1042,36 @@ class GalvoController:
         if self._power == power or power is None:
             return
         self._power = power
-        self.list_mark_current(self._convert_power(power))
+        if self.source == "co2":
+            power_ratio = int(round(200 * power / self._frequency))
+            self.list_mark_power_ratio(power_ratio)
+        if self.source == "fiber":
+            self.list_mark_current(self._convert_power(power))
+
+    def set_fpk(self, fpk):
+        """
+        Set First Pulse Killer
+
+        @param fpk: first_pulse_killer value in percent.
+        @return:
+        """
+        if self.source != "co2":
+            # FPK only used for CO2 source.
+            return
+        if self._fpk == fpk or fpk is None:
+            return
+        self._fpk = fpk
+        first_pulse_killer = int(round(2000.0 / self._frequency))
+        self.list_set_co2_fpk(first_pulse_killer)
 
     def set_frequency(self, frequency):
         if self._frequency == frequency or frequency is None:
             return
         self._frequency = frequency
-        self.list_qswitch_period(self._convert_frequency(frequency))
+        if self.source == "fiber":
+            self.list_qswitch_period(self._convert_frequency(frequency, base=20000.0))
+        elif self.source == "co2":
+            self.list_mark_frequency(self._convert_frequency(frequency, base=10000.0))
 
     def set_pulse_width(self, pulse_width):
         if self._pulse_width == pulse_width or pulse_width is None:
@@ -1033,7 +1095,7 @@ class GalvoController:
         galvos_per_mm = abs(self.galvos_per_mm)
         return int(speed * galvos_per_mm / 1000.0)
 
-    def _convert_frequency(self, frequency_khz):
+    def _convert_frequency(self, frequency_khz, base=20000.0):
         """
         Converts frequency to period.
 
@@ -1042,7 +1104,7 @@ class GalvoController:
         @param frequency_khz: Frequency to convert
         @return:
         """
-        return int(round(20000.0 / frequency_khz)) & 0xFFFF
+        return int(round(base / frequency_khz)) & 0xFFFF
 
     def _convert_power(self, power):
         """
@@ -1155,14 +1217,12 @@ class GalvoController:
 
     def list_mark_frequency(self, frequency):
         """
-        This command is used in some machines but, it's not clear given the amount of reverse engineering how those
-        values are set. This is done for laser_type = 4.
+        This command is used in CO2 source lasers. laser_type = 4
 
-        @param frequency:
+        @param frequency: frequency to set.
         @return:
         """
-        # listMarkFreq
-        raise NotImplementedError
+        self._list_write(listMarkFreq, frequency)
 
     def list_mark_power_ratio(self, power_ratio):
         """
@@ -1171,7 +1231,6 @@ class GalvoController:
         @param power_ratio:
         @return:
         """
-        # listMarkPowerRatio
         self._list_write(listMarkPowerRatio, power_ratio)
 
     def list_mark_speed(self, speed):
@@ -1263,13 +1322,15 @@ class GalvoController:
         """
         self._list_write(listFlyDelay, abs(delay), 0x0000 if delay > 0 else 0x8000)
 
-    def list_set_co2_fpk(self):
+    def list_set_co2_fpk(self, fpk1, fpk2=None):
         """
         Set the CO2 Laser, First Pulse Killer.
 
         @return:
         """
-        self._list_write(listSetCo2FPK)
+        if fpk2 is None:
+            fpk2 = fpk1
+        self._list_write(listSetCo2FPK, fpk1, fpk2)
 
     def list_fly_wait_input(self):
         """
