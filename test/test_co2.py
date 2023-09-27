@@ -120,10 +120,7 @@ class TestSource(unittest.TestCase):
         c.send = test_send
 
         c.source = "co2"
-        c.power = 50
-        c.frequency = 80
-        c.fpk = 10.0
-        c.set()
+        c.set(power=50, frequency=80.0, fpk=10.0)
         with c.marking():
             c.goto(0x5000, 0x5000)
             c.mark(0x5000, 0xA000)
