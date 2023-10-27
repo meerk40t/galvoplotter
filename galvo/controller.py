@@ -36,6 +36,7 @@ class GalvoController:
     def __init__(
         self,
         settings_file=None,
+        source="fiber",
         x=0x8000,
         y=0x8000,
         mark_speed=100.0,
@@ -135,7 +136,7 @@ class GalvoController:
         self.delay_jump_short = delay_jump_short
         self.delay_jump_long = delay_jump_long
 
-        self.source = "fiber"
+        self.source = source
 
         # Running attributes
         self._usb_log = usb_log
